@@ -10,6 +10,6 @@ INSERT INTO bodega (nombre, ubicacion, capacidad, encargado) VALUES
 ('Bodega Norte', 'Medellín - Autopista', 2000, 'Ana Martínez');
 
 INSERT INTO producto (nombre, categoria, stock, precio) VALUES 
-('Laptop Dell XPS 15', 'Electrónica', 50, 1500.00),
+('Laptop Dell XPS 15', 'Electrónica', 60, 1500.00),
 ('Monitor LG 27 pulgadas', 'Electrónica', 120, 300.00),
 ('Silla Ergonómica', 'Mobiliario', 15, 850.00);
