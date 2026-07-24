@@ -1,0 +1,996 @@
+/* ======================================================
+   LogiTrack — app.js
+   SPA Frontend: Auth + Dashboard + CRUD modules
+   API Base: http://localhost:8080
+   ====================================================== */
+
+const API_BASE = 'http://localhost:8080';
+let jwtToken = null;
+let currentUser = null;
+let deleteCallback = null;
+
+/* ─────────────────────────────────────────────────────
+   UTILS
+   ───────────────────────────────────────────────────── */
+
+function getHeaders() {
+  const h = { 'Content-Type': 'application/json' };
+  if (jwtToken) h['Authorization'] = `Bearer ${jwtToken}`;
+  return h;
+}
+
+async function apiFetch(path, options = {}) {
+  const url = API_BASE + path;
+  const config = {
+    headers: getHeaders(),
+    ...options,
+  };
+  try {
+    const res = await fetch(url, config);
+    if (res.status === 204) return null;
+    const text = await res.text();
+    const data = text ? JSON.parse(text) : null;
+    if (!res.ok) {
+      const msg = data?.message || data?.error || `Error ${res.status}`;
+      throw new Error(msg);
+    }
+    return data;
+  } catch (e) {
+    if (e instanceof TypeError) {
+      setApiStatus(false);
+      throw new Error('No se pudo conectar con el servidor. Verifica que el backend esté corriendo en ' + API_BASE);
+    }
+    throw e;
+  }
+}
+
+function setApiStatus(ok) {
+  const el = document.getElementById('api-status');
+  if (!el) return;
+  const dot = el.querySelector('.status-dot');
+  const txt = el.querySelector('.status-text');
+  if (ok) {
+    el.classList.remove('error');
+    txt.textContent = 'Conectado';
+  } else {
+    el.classList.add('error');
+    txt.textContent = 'Sin conexión';
+  }
+}
+
+function formatDate(isoStr) {
+  if (!isoStr) return '—';
+  try {
+    const d = new Date(isoStr);
+    return d.toLocaleString('es-CO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  } catch { return isoStr; }
+}
+
+function formatCurrency(n) {
+  if (n == null) return '—';
+  return '$' + Number(n).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function escapeHtml(str) {
+  if (str == null) return '—';
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/* ─────────────────────────────────────────────────────
+   TOAST
+   ───────────────────────────────────────────────────── */
+function showToast(message, type = 'default') {
+  const container = document.getElementById('toast-container');
+  const icons = {
+    success: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>`,
+    error:   `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`,
+    info:    `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
+    default: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/></svg>`,
+  };
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.innerHTML = `<span class="toast-icon">${icons[type] || icons.default}</span><span>${escapeHtml(message)}</span>`;
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.style.animation = 'toastOut 0.3s ease forwards';
+    setTimeout(() => toast.remove(), 300);
+  }, 3500);
+}
+
+/* ─────────────────────────────────────────────────────
+   MODAL HELPERS
+   ───────────────────────────────────────────────────── */
+function openModal(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+}
+function closeModal(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.add('hidden');
+  document.body.style.overflow = '';
+}
+
+// Close on backdrop click
+document.addEventListener('click', (e) => {
+  if (e.target.classList.contains('modal-backdrop')) {
+    e.target.classList.add('hidden');
+    document.body.style.overflow = '';
+  }
+});
+
+// Close buttons
+document.querySelectorAll('[data-modal]').forEach(btn => {
+  btn.addEventListener('click', () => closeModal(btn.dataset.modal));
+});
+
+// Close on Escape
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.modal-backdrop:not(.hidden)').forEach(m => {
+      m.classList.add('hidden');
+      document.body.style.overflow = '';
+    });
+  }
+});
+
+/* ─────────────────────────────────────────────────────
+   SIDEBAR / NAVIGATION
+   ───────────────────────────────────────────────────── */
+const pages = ['dashboard', 'bodegas', 'productos', 'movimientos', 'auditoria', 'usuarios'];
+const pageTitles = {
+  dashboard:   ['Dashboard', 'Inicio / Dashboard'],
+  bodegas:     ['Bodegas', 'Inventario / Bodegas'],
+  productos:   ['Productos', 'Inventario / Productos'],
+  movimientos: ['Movimientos', 'Inventario / Movimientos'],
+  auditoria:   ['Auditoría', 'Sistema / Auditoría'],
+  usuarios:    ['Usuarios', 'Sistema / Usuarios'],
+};
+
+function navigateTo(page) {
+  pages.forEach(p => {
+    document.getElementById(`page-${p}`)?.classList.remove('active');
+    document.getElementById(`nav-${p}`)?.classList.remove('active');
+  });
+  const el = document.getElementById(`page-${page}`);
+  const nav = document.getElementById(`nav-${page}`);
+  if (el) el.classList.add('active');
+  if (nav) nav.classList.add('active');
+  const [title, breadcrumb] = pageTitles[page] || [page, page];
+  document.getElementById('page-title').textContent = title;
+  document.getElementById('page-breadcrumb').textContent = breadcrumb;
+  closeSidebar();
+  loadPage(page);
+}
+
+function loadPage(page) {
+  switch (page) {
+    case 'dashboard':   loadDashboard(); break;
+    case 'bodegas':     loadBodegas(); break;
+    case 'productos':   loadProductos(); break;
+    case 'movimientos': loadMovimientos(); break;
+    case 'auditoria':   loadAuditoria(); break;
+    case 'usuarios':    loadUsuarios(); break;
+  }
+}
+
+document.querySelectorAll('.nav-item').forEach(item => {
+  item.addEventListener('click', (e) => {
+    e.preventDefault();
+    navigateTo(item.dataset.page);
+  });
+});
+
+// Mobile sidebar
+const sidebar = document.getElementById('sidebar');
+const overlay = document.getElementById('sidebar-overlay');
+document.getElementById('menu-toggle').addEventListener('click', () => {
+  sidebar.classList.add('open');
+  overlay.classList.add('active');
+});
+function closeSidebar() {
+  sidebar.classList.remove('open');
+  overlay.classList.remove('active');
+}
+document.getElementById('sidebar-close').addEventListener('click', closeSidebar);
+overlay.addEventListener('click', closeSidebar);
+
+/* ─────────────────────────────────────────────────────
+   LOGIN
+   ───────────────────────────────────────────────────── */
+const loginForm = document.getElementById('login-form');
+const loginError = document.getElementById('login-error');
+
+loginForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const username = document.getElementById('login-username').value.trim();
+  const password = document.getElementById('login-password').value;
+  if (!username || !password) {
+    showLoginError('Completa todos los campos.');
+    return;
+  }
+  setLoginLoading(true);
+  loginError.classList.add('hidden');
+  try {
+    const data = await apiFetch('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    });
+    jwtToken = data.token || data.accessToken || data.jwt || data;
+    currentUser = username;
+    setApiStatus(true);
+    enterApp();
+  } catch (err) {
+    showLoginError(err.message || 'Credenciales incorrectas.');
+  } finally {
+    setLoginLoading(false);
+  }
+});
+
+function showLoginError(msg) {
+  loginError.textContent = msg;
+  loginError.classList.remove('hidden');
+}
+function setLoginLoading(loading) {
+  const btn = document.getElementById('login-btn');
+  btn.querySelector('.btn-text').classList.toggle('hidden', loading);
+  btn.querySelector('.btn-spinner').classList.toggle('hidden', !loading);
+  btn.disabled = loading;
+}
+
+// Toggle password visibility
+document.getElementById('toggle-pwd').addEventListener('click', () => {
+  const inp = document.getElementById('login-password');
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+});
+
+function enterApp() {
+  document.getElementById('login-screen').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+  const initials = (currentUser || 'A').charAt(0).toUpperCase();
+  document.getElementById('user-avatar').textContent = initials;
+  document.getElementById('sidebar-username').textContent = currentUser || 'Usuario';
+  navigateTo('dashboard');
+}
+
+// Logout
+document.getElementById('logout-btn').addEventListener('click', () => {
+  jwtToken = null;
+  currentUser = null;
+  document.getElementById('app').classList.add('hidden');
+  document.getElementById('login-screen').classList.remove('hidden');
+  document.getElementById('login-form').reset();
+  loginError.classList.add('hidden');
+});
+
+/* ─────────────────────────────────────────────────────
+   DASHBOARD
+   ───────────────────────────────────────────────────── */
+async function loadDashboard() {
+  try {
+    const [bodegas, productos, movimientos, stockBajo] = await Promise.allSettled([
+      apiFetch('/api/bodegas'),
+      apiFetch('/api/productos'),
+      apiFetch('/api/movimientos'),
+      apiFetch('/api/productos/stock-bajo'),
+    ]);
+    animateCount('count-bodegas', bodegas.status === 'fulfilled' ? (bodegas.value?.length ?? '—') : '—');
+    animateCount('count-productos', productos.status === 'fulfilled' ? (productos.value?.length ?? '—') : '—');
+    animateCount('count-movimientos', movimientos.status === 'fulfilled' ? (movimientos.value?.length ?? '—') : '—');
+    animateCount('count-stockbajo', stockBajo.status === 'fulfilled' ? (stockBajo.value?.length ?? '—') : '—');
+    if (movimientos.status === 'fulfilled') renderRecentMovimientos(movimientos.value || []);
+    if (stockBajo.status === 'fulfilled') renderLowStock(stockBajo.value || []);
+    setApiStatus(true);
+  } catch (e) {
+    setApiStatus(false);
+  }
+}
+
+function animateCount(id, target) {
+  const el = document.getElementById(id);
+  if (!el || typeof target !== 'number') { if (el) el.textContent = target; return; }
+  let start = 0;
+  const step = target / 30;
+  const interval = setInterval(() => {
+    start = Math.min(start + Math.ceil(step), target);
+    el.textContent = start;
+    if (start >= target) clearInterval(interval);
+  }, 25);
+}
+
+function renderRecentMovimientos(movimientos) {
+  const container = document.getElementById('recent-movimientos');
+  const recent = movimientos.slice(-5).reverse();
+  if (!recent.length) { container.innerHTML = '<p style="color:var(--clr-txt-muted);font-size:.85rem;text-align:center;padding:1rem;">Sin movimientos registrados</p>'; return; }
+  const colors = { ENTRADA: '#22c55e', SALIDA: '#ef4444', TRANSFERENCIA: '#3b82f6' };
+  const bgs = { ENTRADA: '#f0fdf4', SALIDA: '#fef2f2', TRANSFERENCIA: '#eff6ff' };
+  container.innerHTML = recent.map(m => `
+    <div class="recent-item">
+      <div class="recent-item-icon" style="background:${bgs[m.tipoMovimiento]||'#f5f4f2'};color:${colors[m.tipoMovimiento]||'#78716c'};">
+        ${(m.tipoMovimiento||'?').charAt(0)}
+      </div>
+      <div class="recent-item-info">
+        <div class="recent-item-title">${escapeHtml(m.tipoMovimiento)} — ID #${m.id}</div>
+        <div class="recent-item-sub">Usuario: ${escapeHtml(m.usuario?.username || m.usuario || '—')}</div>
+      </div>
+      <span class="recent-item-right">${formatDate(m.fecha)}</span>
+    </div>
+  `).join('');
+}
+
+function renderLowStock(productos) {
+  const container = document.getElementById('low-stock-list');
+  if (!productos.length) { container.innerHTML = '<p style="color:var(--clr-green);font-size:.85rem;text-align:center;padding:1rem;">✓ Todo el stock es suficiente</p>'; return; }
+  container.innerHTML = productos.map(p => `
+    <div class="recent-item">
+      <div class="recent-item-icon" style="background:#fef2f2;color:#ef4444;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+      </div>
+      <div class="recent-item-info">
+        <div class="recent-item-title">${escapeHtml(p.nombre)}</div>
+        <div class="recent-item-sub">${escapeHtml(p.categoria)}</div>
+      </div>
+      <span class="recent-item-right stock-low">${p.stock} uds</span>
+    </div>
+  `).join('');
+}
+
+/* ─────────────────────────────────────────────────────
+   BODEGAS
+   ───────────────────────────────────────────────────── */
+let bodegasData = [];
+
+async function loadBodegas() {
+  try {
+    bodegasData = await apiFetch('/api/bodegas') || [];
+    renderBodegasTable(bodegasData);
+    setApiStatus(true);
+  } catch (e) {
+    showTableError('tbody-bodegas', 6, e.message);
+    setApiStatus(false);
+  }
+}
+
+function renderBodegasTable(data) {
+  const tbody = document.getElementById('tbody-bodegas');
+  if (!data.length) { tbody.innerHTML = `<tr><td colspan="6"><div class="table-loading">No hay bodegas registradas</div></td></tr>`; return; }
+  tbody.innerHTML = data.map(b => `
+    <tr>
+      <td><span style="font-weight:600;color:var(--clr-txt-muted)">#${b.id}</span></td>
+      <td style="font-weight:500">${escapeHtml(b.nombre)}</td>
+      <td>${escapeHtml(b.ubicacion)}</td>
+      <td>${Number(b.capacidad).toLocaleString('es-CO')} uds</td>
+      <td>${escapeHtml(b.encargado)}</td>
+      <td>
+        <div class="actions-cell">
+          <button class="btn-icon" onclick="editBodega(${b.id})" title="Editar">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          <button class="btn-icon danger" onclick="confirmDelete('bodega', ${b.id}, '${escapeHtml(b.nombre)}')" title="Eliminar">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+          </button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+// Search
+document.getElementById('search-bodegas').addEventListener('input', (e) => {
+  const q = e.target.value.toLowerCase();
+  renderBodegasTable(bodegasData.filter(b =>
+    b.nombre.toLowerCase().includes(q) ||
+    b.ubicacion.toLowerCase().includes(q) ||
+    b.encargado.toLowerCase().includes(q)
+  ));
+});
+
+// New
+document.getElementById('btn-nueva-bodega').addEventListener('click', () => {
+  document.getElementById('form-bodega').reset();
+  document.getElementById('bodega-id').value = '';
+  document.getElementById('modal-bodega-title').textContent = 'Nueva Bodega';
+  document.getElementById('bodega-error').classList.add('hidden');
+  openModal('modal-bodega');
+});
+
+// Edit
+function editBodega(id) {
+  const b = bodegasData.find(x => x.id === id);
+  if (!b) return;
+  document.getElementById('bodega-id').value = b.id;
+  document.getElementById('bodega-nombre').value = b.nombre;
+  document.getElementById('bodega-ubicacion').value = b.ubicacion;
+  document.getElementById('bodega-capacidad').value = b.capacidad;
+  document.getElementById('bodega-encargado').value = b.encargado;
+  document.getElementById('modal-bodega-title').textContent = 'Editar Bodega';
+  document.getElementById('bodega-error').classList.add('hidden');
+  openModal('modal-bodega');
+}
+
+// Save
+document.getElementById('form-bodega').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const id = document.getElementById('bodega-id').value;
+  const body = {
+    nombre:    document.getElementById('bodega-nombre').value.trim(),
+    ubicacion: document.getElementById('bodega-ubicacion').value.trim(),
+    capacidad: parseInt(document.getElementById('bodega-capacidad').value),
+    encargado: document.getElementById('bodega-encargado').value.trim(),
+  };
+  if (!body.nombre || !body.ubicacion || !body.capacidad || !body.encargado) {
+    showModalError('bodega-error', 'Completa todos los campos obligatorios.');
+    return;
+  }
+  setModalLoading('btn-save-bodega', true);
+  try {
+    if (id) {
+      await apiFetch(`/api/bodegas/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+      showToast('Bodega actualizada correctamente', 'success');
+    } else {
+      await apiFetch('/api/bodegas', { method: 'POST', body: JSON.stringify(body) });
+      showToast('Bodega creada correctamente', 'success');
+    }
+    closeModal('modal-bodega');
+    loadBodegas();
+  } catch (err) {
+    showModalError('bodega-error', err.message);
+  } finally {
+    setModalLoading('btn-save-bodega', false);
+  }
+});
+
+/* ─────────────────────────────────────────────────────
+   PRODUCTOS
+   ───────────────────────────────────────────────────── */
+let productosData = [];
+let showingLowStock = false;
+
+async function loadProductos() {
+  try {
+    productosData = await apiFetch('/api/productos') || [];
+    renderProductosTable(productosData);
+    setApiStatus(true);
+  } catch (e) {
+    showTableError('tbody-productos', 6, e.message);
+    setApiStatus(false);
+  }
+}
+
+function renderProductosTable(data) {
+  const tbody = document.getElementById('tbody-productos');
+  if (!data.length) { tbody.innerHTML = `<tr><td colspan="6"><div class="table-loading">No hay productos registrados</div></td></tr>`; return; }
+  tbody.innerHTML = data.map(p => `
+    <tr>
+      <td><span style="font-weight:600;color:var(--clr-txt-muted)">#${p.id}</span></td>
+      <td style="font-weight:500">${escapeHtml(p.nombre)}</td>
+      <td><span class="badge badge-empleado">${escapeHtml(p.categoria)}</span></td>
+      <td class="${p.stock < 10 ? 'stock-low' : 'stock-ok'}">${p.stock} uds ${p.stock < 10 ? '⚠' : ''}</td>
+      <td>${formatCurrency(p.precio)}</td>
+      <td>
+        <div class="actions-cell">
+          <button class="btn-icon" onclick="editProducto(${p.id})" title="Editar">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          <button class="btn-icon danger" onclick="confirmDelete('producto', ${p.id}, '${escapeHtml(p.nombre)}')" title="Eliminar">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+          </button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+document.getElementById('search-productos').addEventListener('input', (e) => {
+  const q = e.target.value.toLowerCase();
+  const base = showingLowStock ? productosData.filter(p => p.stock < 10) : productosData;
+  renderProductosTable(base.filter(p =>
+    p.nombre.toLowerCase().includes(q) ||
+    p.categoria.toLowerCase().includes(q)
+  ));
+});
+
+document.getElementById('btn-stock-bajo').addEventListener('click', async () => {
+  showingLowStock = !showingLowStock;
+  const btn = document.getElementById('btn-stock-bajo');
+  if (showingLowStock) {
+    btn.classList.add('btn-primary');
+    btn.classList.remove('btn-outline');
+    try {
+      const data = await apiFetch('/api/productos/stock-bajo');
+      renderProductosTable(data || []);
+    } catch (e) { showToast(e.message, 'error'); }
+  } else {
+    btn.classList.remove('btn-primary');
+    btn.classList.add('btn-outline');
+    renderProductosTable(productosData);
+  }
+});
+
+document.getElementById('btn-nuevo-producto').addEventListener('click', () => {
+  document.getElementById('form-producto').reset();
+  document.getElementById('producto-id').value = '';
+  document.getElementById('modal-producto-title').textContent = 'Nuevo Producto';
+  document.getElementById('producto-error').classList.add('hidden');
+  openModal('modal-producto');
+});
+
+function editProducto(id) {
+  const p = productosData.find(x => x.id === id);
+  if (!p) return;
+  document.getElementById('producto-id').value = p.id;
+  document.getElementById('producto-nombre').value = p.nombre;
+  document.getElementById('producto-categoria').value = p.categoria;
+  document.getElementById('producto-stock').value = p.stock;
+  document.getElementById('producto-precio').value = p.precio;
+  document.getElementById('modal-producto-title').textContent = 'Editar Producto';
+  document.getElementById('producto-error').classList.add('hidden');
+  openModal('modal-producto');
+}
+
+document.getElementById('form-producto').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const id = document.getElementById('producto-id').value;
+  const body = {
+    nombre:    document.getElementById('producto-nombre').value.trim(),
+    categoria: document.getElementById('producto-categoria').value.trim(),
+    stock:     parseInt(document.getElementById('producto-stock').value),
+    precio:    parseFloat(document.getElementById('producto-precio').value),
+  };
+  if (!body.nombre || !body.categoria || isNaN(body.stock) || isNaN(body.precio)) {
+    showModalError('producto-error', 'Completa todos los campos obligatorios.');
+    return;
+  }
+  setModalLoading('btn-save-producto', true);
+  try {
+    if (id) {
+      await apiFetch(`/api/productos/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+      showToast('Producto actualizado correctamente', 'success');
+    } else {
+      await apiFetch('/api/productos', { method: 'POST', body: JSON.stringify(body) });
+      showToast('Producto creado correctamente', 'success');
+    }
+    closeModal('modal-producto');
+    loadProductos();
+  } catch (err) {
+    showModalError('producto-error', err.message);
+  } finally {
+    setModalLoading('btn-save-producto', false);
+  }
+});
+
+/* ─────────────────────────────────────────────────────
+   MOVIMIENTOS
+   ───────────────────────────────────────────────────── */
+let movimientosData = [];
+
+async function loadMovimientos() {
+  try {
+    movimientosData = await apiFetch('/api/movimientos') || [];
+    renderMovimientosTable(movimientosData);
+    setApiStatus(true);
+  } catch (e) {
+    showTableError('tbody-movimientos', 7, e.message);
+    setApiStatus(false);
+  }
+}
+
+function renderMovimientosTable(data) {
+  const tbody = document.getElementById('tbody-movimientos');
+  if (!data.length) { tbody.innerHTML = `<tr><td colspan="7"><div class="table-loading">No hay movimientos registrados</div></td></tr>`; return; }
+  tbody.innerHTML = data.map(m => {
+    const tipo = m.tipoMovimiento || '—';
+    const badgeClass = `badge badge-${tipo.toLowerCase()}`;
+    return `
+    <tr>
+      <td><span style="font-weight:600;color:var(--clr-txt-muted)">#${m.id}</span></td>
+      <td>${formatDate(m.fecha)}</td>
+      <td><span class="${badgeClass}">${tipo}</span></td>
+      <td>${escapeHtml(m.usuario?.username || m.usuario || '—')}</td>
+      <td>${escapeHtml(m.bodegaOrigen?.nombre || '—')}</td>
+      <td>${escapeHtml(m.bodegaDestino?.nombre || '—')}</td>
+      <td>
+        <div class="actions-cell">
+          <button class="btn-icon" onclick="verDetalleMovimiento(${m.id})" title="Ver detalle">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          </button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+document.getElementById('search-movimientos').addEventListener('input', (e) => {
+  const q = e.target.value.toLowerCase();
+  const tipo = document.getElementById('filter-tipo-movimiento').value;
+  filterMovimientos(q, tipo);
+});
+
+document.getElementById('filter-tipo-movimiento').addEventListener('change', (e) => {
+  const q = document.getElementById('search-movimientos').value.toLowerCase();
+  filterMovimientos(q, e.target.value);
+});
+
+function filterMovimientos(q, tipo) {
+  let data = movimientosData;
+  if (tipo) data = data.filter(m => m.tipoMovimiento === tipo);
+  if (q) data = data.filter(m =>
+    String(m.id).includes(q) ||
+    (m.usuario?.username || '').toLowerCase().includes(q) ||
+    (m.bodegaOrigen?.nombre || '').toLowerCase().includes(q) ||
+    (m.bodegaDestino?.nombre || '').toLowerCase().includes(q)
+  );
+  renderMovimientosTable(data);
+}
+
+function verDetalleMovimiento(id) {
+  const m = movimientosData.find(x => x.id === id);
+  if (!m) return;
+  const detalles = m.detalles || [];
+  const detallesHtml = detalles.length
+    ? `<div class="detail-section">Productos</div>
+       <table class="data-table" style="margin-top:.25rem">
+         <thead><tr><th>Producto ID</th><th>Nombre</th><th>Cantidad</th></tr></thead>
+         <tbody>${detalles.map(d => `<tr><td>#${d.producto?.id||d.productoId||'—'}</td><td>${escapeHtml(d.producto?.nombre||'—')}</td><td>${d.cantidad}</td></tr>`).join('')}</tbody>
+       </table>`
+    : '<p style="color:var(--clr-txt-muted);font-size:.85rem">Sin detalles de productos</p>';
+  document.getElementById('modal-detalle-title').textContent = `Movimiento #${m.id}`;
+  document.getElementById('modal-detalle-body').innerHTML = `
+    <div class="detail-grid">
+      <div class="detail-item"><span class="detail-label">ID</span><span class="detail-value">#${m.id}</span></div>
+      <div class="detail-item"><span class="detail-label">Tipo</span><span class="detail-value">${m.tipoMovimiento}</span></div>
+      <div class="detail-item"><span class="detail-label">Fecha</span><span class="detail-value">${formatDate(m.fecha)}</span></div>
+      <div class="detail-item"><span class="detail-label">Usuario</span><span class="detail-value">${escapeHtml(m.usuario?.username || '—')}</span></div>
+      <div class="detail-item"><span class="detail-label">Bodega Origen</span><span class="detail-value">${escapeHtml(m.bodegaOrigen?.nombre || '—')}</span></div>
+      <div class="detail-item"><span class="detail-label">Bodega Destino</span><span class="detail-value">${escapeHtml(m.bodegaDestino?.nombre || '—')}</span></div>
+    </div>
+    ${detallesHtml}
+  `;
+  openModal('modal-detalle');
+}
+
+// Registrar movimiento
+document.getElementById('btn-nuevo-movimiento').addEventListener('click', () => {
+  document.getElementById('form-movimiento').reset();
+  document.getElementById('detalles-container').innerHTML = `
+    <div class="detalle-row" data-index="0">
+      <input type="number" placeholder="ID Producto" class="detalle-producto" />
+      <input type="number" placeholder="Cantidad" class="detalle-cantidad" min="1" />
+      <button type="button" class="btn-remove-detalle" onclick="removeDetalle(this)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>`;
+  document.getElementById('movimiento-error').classList.add('hidden');
+  openModal('modal-movimiento');
+});
+
+document.getElementById('btn-add-detalle').addEventListener('click', () => {
+  const container = document.getElementById('detalles-container');
+  const idx = container.children.length;
+  const div = document.createElement('div');
+  div.className = 'detalle-row';
+  div.dataset.index = idx;
+  div.innerHTML = `
+    <input type="number" placeholder="ID Producto" class="detalle-producto" />
+    <input type="number" placeholder="Cantidad" class="detalle-cantidad" min="1" />
+    <button type="button" class="btn-remove-detalle" onclick="removeDetalle(this)">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </button>`;
+  container.appendChild(div);
+});
+
+function removeDetalle(btn) {
+  const row = btn.closest('.detalle-row');
+  const container = document.getElementById('detalles-container');
+  if (container.children.length > 1) row.remove();
+}
+
+document.getElementById('form-movimiento').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const tipo = document.getElementById('mov-tipo').value;
+  const usuarioId = document.getElementById('mov-usuario').value;
+  const bodegaOrigenId = document.getElementById('mov-bodega-origen').value;
+  const bodegaDestinoId = document.getElementById('mov-bodega-destino').value;
+  if (!tipo || !usuarioId) { showModalError('movimiento-error', 'Completa el tipo y usuario.'); return; }
+  const detalleRows = document.querySelectorAll('#detalles-container .detalle-row');
+  const detalles = [];
+  for (const row of detalleRows) {
+    const pid = row.querySelector('.detalle-producto').value;
+    const qty = row.querySelector('.detalle-cantidad').value;
+    if (pid && qty) detalles.push({ producto: { id: parseInt(pid) }, cantidad: parseInt(qty) });
+  }
+  const body = {
+    tipoMovimiento: tipo,
+    usuario: { id: parseInt(usuarioId) },
+    detalles,
+  };
+  if (bodegaOrigenId) body.bodegaOrigen = { id: parseInt(bodegaOrigenId) };
+  if (bodegaDestinoId) body.bodegaDestino = { id: parseInt(bodegaDestinoId) };
+  setModalLoading('btn-save-movimiento', true);
+  try {
+    await apiFetch('/api/movimientos', { method: 'POST', body: JSON.stringify(body) });
+    showToast('Movimiento registrado correctamente', 'success');
+    closeModal('modal-movimiento');
+    loadMovimientos();
+  } catch (err) {
+    showModalError('movimiento-error', err.message);
+  } finally {
+    setModalLoading('btn-save-movimiento', false);
+  }
+});
+
+/* ─────────────────────────────────────────────────────
+   AUDITORÍA
+   ───────────────────────────────────────────────────── */
+let auditoriaData = [];
+
+async function loadAuditoria() {
+  try {
+    auditoriaData = await apiFetch('/api/auditoria') || [];
+    renderAuditoriaTable(auditoriaData);
+    setApiStatus(true);
+  } catch (e) {
+    showTableError('tbody-auditoria', 7, e.message);
+    setApiStatus(false);
+  }
+}
+
+function renderAuditoriaTable(data) {
+  const tbody = document.getElementById('tbody-auditoria');
+  if (!data.length) { tbody.innerHTML = `<tr><td colspan="7"><div class="table-loading">No hay registros de auditoría</div></td></tr>`; return; }
+  tbody.innerHTML = data.map(a => {
+    const op = (a.tipoOperacion || '').toLowerCase();
+    return `
+    <tr>
+      <td><span style="font-weight:600;color:var(--clr-txt-muted)">#${a.id}</span></td>
+      <td><span class="badge badge-${op}">${a.tipoOperacion||'—'}</span></td>
+      <td>${formatDate(a.fechaHora)}</td>
+      <td style="font-weight:500">${escapeHtml(a.usuario)}</td>
+      <td>${escapeHtml(a.entidadAfectada)}</td>
+      <td>${a.entidadId || '—'}</td>
+      <td>
+        <button class="btn-icon" onclick="verDetalleAuditoria(${a.id})" title="Ver cambios">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        </button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+document.getElementById('search-auditoria').addEventListener('input', (e) => {
+  const q = e.target.value.toLowerCase();
+  const op = document.getElementById('filter-tipo-operacion').value;
+  filterAuditoria(q, op);
+});
+document.getElementById('filter-tipo-operacion').addEventListener('change', (e) => {
+  const q = document.getElementById('search-auditoria').value.toLowerCase();
+  filterAuditoria(q, e.target.value);
+});
+function filterAuditoria(q, op) {
+  let data = auditoriaData;
+  if (op) data = data.filter(a => a.tipoOperacion === op);
+  if (q) data = data.filter(a =>
+    (a.usuario || '').toLowerCase().includes(q) ||
+    (a.entidadAfectada || '').toLowerCase().includes(q)
+  );
+  renderAuditoriaTable(data);
+}
+
+function verDetalleAuditoria(id) {
+  const a = auditoriaData.find(x => x.id === id);
+  if (!a) return;
+  document.getElementById('modal-detalle-title').textContent = `Auditoría #${a.id}`;
+  document.getElementById('modal-detalle-body').innerHTML = `
+    <div class="detail-grid">
+      <div class="detail-item"><span class="detail-label">ID</span><span class="detail-value">#${a.id}</span></div>
+      <div class="detail-item"><span class="detail-label">Operación</span><span class="detail-value">${a.tipoOperacion}</span></div>
+      <div class="detail-item"><span class="detail-label">Fecha/Hora</span><span class="detail-value">${formatDate(a.fechaHora)}</span></div>
+      <div class="detail-item"><span class="detail-label">Usuario</span><span class="detail-value">${escapeHtml(a.usuario)}</span></div>
+      <div class="detail-item"><span class="detail-label">Entidad</span><span class="detail-value">${escapeHtml(a.entidadAfectada)}</span></div>
+      <div class="detail-item"><span class="detail-label">ID Entidad</span><span class="detail-value">${a.entidadId || '—'}</span></div>
+    </div>
+    <div class="detail-section">Valor Anterior</div>
+    <div class="detail-pre">${a.valorAnterior ? escapeHtml(a.valorAnterior) : 'Sin valor anterior'}</div>
+    <div class="detail-section">Valor Nuevo</div>
+    <div class="detail-pre">${a.valorNuevo ? escapeHtml(a.valorNuevo) : 'Sin valor nuevo'}</div>
+  `;
+  openModal('modal-detalle');
+}
+
+/* ─────────────────────────────────────────────────────
+   USUARIOS
+   ───────────────────────────────────────────────────── */
+let usuariosData = [];
+
+async function loadUsuarios() {
+  try {
+    usuariosData = await apiFetch('/api/usuarios') || [];
+    renderUsuariosTable(usuariosData);
+    setApiStatus(true);
+  } catch (e) {
+    showTableError('tbody-usuarios', 4, e.message);
+    setApiStatus(false);
+  }
+}
+
+function renderUsuariosTable(data) {
+  const tbody = document.getElementById('tbody-usuarios');
+  if (!data.length) { tbody.innerHTML = `<tr><td colspan="4"><div class="table-loading">No hay usuarios registrados</div></td></tr>`; return; }
+  tbody.innerHTML = data.map(u => `
+    <tr>
+      <td><span style="font-weight:600;color:var(--clr-txt-muted)">#${u.id}</span></td>
+      <td style="font-weight:500">
+        <div style="display:flex;align-items:center;gap:.5rem">
+          <div style="width:28px;height:28px;background:var(--clr-sidebar-bg);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;flex-shrink:0">
+            ${(u.username||'?').charAt(0).toUpperCase()}
+          </div>
+          ${escapeHtml(u.username)}
+        </div>
+      </td>
+      <td><span class="badge ${u.rol === 'ADMIN' ? 'badge-admin' : 'badge-empleado'}">${u.rol}</span></td>
+      <td>
+        <div class="actions-cell">
+          <button class="btn-icon" onclick="editUsuario(${u.id})" title="Editar">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          <button class="btn-icon danger" onclick="confirmDelete('usuario', ${u.id}, '${escapeHtml(u.username)}')" title="Eliminar">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+          </button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+document.getElementById('search-usuarios').addEventListener('input', (e) => {
+  const q = e.target.value.toLowerCase();
+  renderUsuariosTable(usuariosData.filter(u => u.username.toLowerCase().includes(q)));
+});
+
+document.getElementById('btn-nuevo-usuario').addEventListener('click', () => {
+  document.getElementById('form-usuario').reset();
+  document.getElementById('usuario-id').value = '';
+  document.getElementById('modal-usuario-title').textContent = 'Nuevo Usuario';
+  document.getElementById('usuario-error').classList.add('hidden');
+  document.getElementById('group-password').style.display = '';
+  openModal('modal-usuario');
+});
+
+function editUsuario(id) {
+  const u = usuariosData.find(x => x.id === id);
+  if (!u) return;
+  document.getElementById('usuario-id').value = u.id;
+  document.getElementById('usuario-username').value = u.username;
+  document.getElementById('usuario-password').value = '';
+  document.getElementById('usuario-rol').value = u.rol;
+  document.getElementById('modal-usuario-title').textContent = 'Editar Usuario';
+  document.getElementById('usuario-error').classList.add('hidden');
+  document.getElementById('group-password').style.display = 'none';
+  openModal('modal-usuario');
+}
+
+document.getElementById('form-usuario').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const id = document.getElementById('usuario-id').value;
+  const body = {
+    username: document.getElementById('usuario-username').value.trim(),
+    rol:      document.getElementById('usuario-rol').value,
+  };
+  if (!id) {
+    body.password = document.getElementById('usuario-password').value;
+    if (!body.password) { showModalError('usuario-error', 'La contraseña es obligatoria.'); return; }
+  }
+  if (!body.username) { showModalError('usuario-error', 'El nombre de usuario es obligatorio.'); return; }
+  setModalLoading('btn-save-usuario', true);
+  try {
+    if (id) {
+      await apiFetch(`/api/usuarios/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+      showToast('Usuario actualizado correctamente', 'success');
+    } else {
+      await apiFetch('/api/usuarios', { method: 'POST', body: JSON.stringify(body) });
+      showToast('Usuario creado correctamente', 'success');
+    }
+    closeModal('modal-usuario');
+    loadUsuarios();
+  } catch (err) {
+    showModalError('usuario-error', err.message);
+  } finally {
+    setModalLoading('btn-save-usuario', false);
+  }
+});
+
+/* ─────────────────────────────────────────────────────
+   DELETE CONFIRM
+   ───────────────────────────────────────────────────── */
+function confirmDelete(type, id, name) {
+  document.getElementById('confirm-message').textContent =
+    `¿Estás seguro de que deseas eliminar "${name}"? Esta acción no se puede deshacer.`;
+  deleteCallback = async () => {
+    setModalLoading('btn-confirm-delete', true);
+    try {
+      const endpoints = { bodega: '/api/bodegas', producto: '/api/productos', usuario: '/api/usuarios' };
+      await apiFetch(`${endpoints[type]}/${id}`, { method: 'DELETE' });
+      showToast(`${type.charAt(0).toUpperCase() + type.slice(1)} eliminado correctamente`, 'success');
+      closeModal('modal-confirm');
+      const loaders = { bodega: loadBodegas, producto: loadProductos, usuario: loadUsuarios };
+      loaders[type]?.();
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setModalLoading('btn-confirm-delete', false);
+    }
+  };
+  openModal('modal-confirm');
+}
+
+document.getElementById('btn-confirm-delete').addEventListener('click', () => {
+  if (deleteCallback) deleteCallback();
+});
+
+/* ─────────────────────────────────────────────────────
+   HELPERS
+   ───────────────────────────────────────────────────── */
+function showModalError(id, msg) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+
+function setModalLoading(btnId, loading) {
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+  const txt = btn.querySelector('.btn-text');
+  const spinner = btn.querySelector('.btn-spinner');
+  if (txt) txt.classList.toggle('hidden', loading);
+  if (spinner) spinner.classList.toggle('hidden', !loading);
+  btn.disabled = loading;
+}
+
+function showTableError(tbodyId, cols, msg) {
+  const tbody = document.getElementById(tbodyId);
+  if (!tbody) return;
+  tbody.innerHTML = `<tr><td colspan="${cols}"><div class="table-loading" style="color:var(--clr-red)">⚠ ${escapeHtml(msg)}</div></td></tr>`;
+}
+
+/* ─────────────────────────────────────────────────────
+   INIT — check if token already in sessionStorage
+   ───────────────────────────────────────────────────── */
+(function init() {
+  const saved = sessionStorage.getItem('logitrack_token');
+  const savedUser = sessionStorage.getItem('logitrack_user');
+  if (saved) {
+    jwtToken = saved;
+    currentUser = savedUser || 'Usuario';
+    enterApp();
+  }
+})();
+
+// Persist token in sessionStorage on login success (patch enterApp)
+const originalEnterApp = window.enterApp;
+window.addEventListener('DOMContentLoaded', () => {
+  const origLogin = loginForm.onsubmit;
+});
+
+// Patch to persist session
+const _origApiFetch = apiFetch;
+// Store token when login succeeds
+loginForm.addEventListener('submit', () => {}, { capture: true }); // placeholder
+
+// Save token & user after successful login
+const origFormSubmit = loginForm.onsubmit;
+loginForm.addEventListener('submit', () => {
+  setTimeout(() => {
+    if (jwtToken) {
+      sessionStorage.setItem('logitrack_token', jwtToken);
+      sessionStorage.setItem('logitrack_user', currentUser || '');
+    }
+  }, 500);
+});
+
+document.getElementById('logout-btn').addEventListener('click', () => {
+  sessionStorage.removeItem('logitrack_token');
+  sessionStorage.removeItem('logitrack_user');
+}, { capture: true });
