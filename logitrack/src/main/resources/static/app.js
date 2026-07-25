@@ -1,13 +1,40 @@
 /* ======================================================
    LogiTrack — app.js
    SPA Frontend: Auth + Dashboard + CRUD modules
-   API Base: http://localhost:8080
    ====================================================== */
 
 const API_BASE = 'http://localhost:8080';
 let jwtToken = null;
 let currentUser = null;
 let deleteCallback = null;
+
+/* ─────────────────────────────────────────────────────
+   AUTH HELPERS — Token en sessionStorage
+   ───────────────────────────────────────────────────── */
+
+function saveSession(token, user) {
+  jwtToken = token;
+  currentUser = user;
+  sessionStorage.setItem('logitrack_token', token);
+  sessionStorage.setItem('logitrack_user', user);
+}
+
+function clearSession() {
+  jwtToken = null;
+  currentUser = null;
+  sessionStorage.removeItem('logitrack_token');
+  sessionStorage.removeItem('logitrack_user');
+}
+
+function forceLogout() {
+  clearSession();
+  document.getElementById('app').classList.add('hidden');
+  document.getElementById('login-screen').classList.remove('hidden');
+  document.getElementById('login-form').reset();
+  const loginError = document.getElementById('login-error');
+  if (loginError) loginError.classList.add('hidden');
+  showToast('Sesión expirada. Por favor inicia sesión nuevamente.', 'error');
+}
 
 /* ─────────────────────────────────────────────────────
    UTILS
@@ -28,6 +55,12 @@ async function apiFetch(path, options = {}) {
   try {
     const res = await fetch(url, config);
     if (res.status === 204) return null;
+
+    if (res.status === 401 && jwtToken) {
+      forceLogout();
+      throw new Error('Sesión expirada.');
+    }
+
     const text = await res.text();
     const data = text ? JSON.parse(text) : null;
     if (!res.ok) {
@@ -38,7 +71,7 @@ async function apiFetch(path, options = {}) {
   } catch (e) {
     if (e instanceof TypeError) {
       setApiStatus(false);
-      throw new Error('No se pudo conectar con el servidor. Verifica que el backend esté corriendo en ' + API_BASE);
+      throw new Error('No se pudo conectar con el servidor. Verifica que el backend esté corriendo.');
     }
     throw e;
   }
@@ -83,8 +116,8 @@ function showToast(message, type = 'default') {
   const container = document.getElementById('toast-container');
   const icons = {
     success: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>`,
-    error:   `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`,
-    info:    `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
+    error: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`,
+    info: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
     default: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/></svg>`,
   };
   const toast = document.createElement('div');
@@ -113,7 +146,6 @@ function closeModal(id) {
   document.body.style.overflow = '';
 }
 
-// Close on backdrop click
 document.addEventListener('click', (e) => {
   if (e.target.classList.contains('modal-backdrop')) {
     e.target.classList.add('hidden');
@@ -121,12 +153,10 @@ document.addEventListener('click', (e) => {
   }
 });
 
-// Close buttons
 document.querySelectorAll('[data-modal]').forEach(btn => {
   btn.addEventListener('click', () => closeModal(btn.dataset.modal));
 });
 
-// Close on Escape
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     document.querySelectorAll('.modal-backdrop:not(.hidden)').forEach(m => {
@@ -141,12 +171,12 @@ document.addEventListener('keydown', (e) => {
    ───────────────────────────────────────────────────── */
 const pages = ['dashboard', 'bodegas', 'productos', 'movimientos', 'auditoria', 'usuarios'];
 const pageTitles = {
-  dashboard:   ['Dashboard', 'Inicio / Dashboard'],
-  bodegas:     ['Bodegas', 'Inventario / Bodegas'],
-  productos:   ['Productos', 'Inventario / Productos'],
+  dashboard: ['Dashboard', 'Inicio / Dashboard'],
+  bodegas: ['Bodegas', 'Inventario / Bodegas'],
+  productos: ['Productos', 'Inventario / Productos'],
   movimientos: ['Movimientos', 'Inventario / Movimientos'],
-  auditoria:   ['Auditoría', 'Sistema / Auditoría'],
-  usuarios:    ['Usuarios', 'Sistema / Usuarios'],
+  auditoria: ['Auditoría', 'Sistema / Auditoría'],
+  usuarios: ['Usuarios', 'Sistema / Usuarios'],
 };
 
 function navigateTo(page) {
@@ -167,12 +197,12 @@ function navigateTo(page) {
 
 function loadPage(page) {
   switch (page) {
-    case 'dashboard':   loadDashboard(); break;
-    case 'bodegas':     loadBodegas(); break;
-    case 'productos':   loadProductos(); break;
+    case 'dashboard': loadDashboard(); break;
+    case 'bodegas': loadBodegas(); break;
+    case 'productos': loadProductos(); break;
     case 'movimientos': loadMovimientos(); break;
-    case 'auditoria':   loadAuditoria(); break;
-    case 'usuarios':    loadUsuarios(); break;
+    case 'auditoria': loadAuditoria(); break;
+    case 'usuarios': loadUsuarios(); break;
   }
 }
 
@@ -183,19 +213,18 @@ document.querySelectorAll('.nav-item').forEach(item => {
   });
 });
 
-// Mobile sidebar
 const sidebar = document.getElementById('sidebar');
 const overlay = document.getElementById('sidebar-overlay');
-document.getElementById('menu-toggle').addEventListener('click', () => {
+document.getElementById('menu-toggle')?.addEventListener('click', () => {
   sidebar.classList.add('open');
   overlay.classList.add('active');
 });
 function closeSidebar() {
-  sidebar.classList.remove('open');
-  overlay.classList.remove('active');
+  sidebar?.classList.remove('open');
+  overlay?.classList.remove('active');
 }
-document.getElementById('sidebar-close').addEventListener('click', closeSidebar);
-overlay.addEventListener('click', closeSidebar);
+document.getElementById('sidebar-close')?.addEventListener('click', closeSidebar);
+overlay?.addEventListener('click', closeSidebar);
 
 /* ─────────────────────────────────────────────────────
    LOGIN
@@ -203,7 +232,7 @@ overlay.addEventListener('click', closeSidebar);
 const loginForm = document.getElementById('login-form');
 const loginError = document.getElementById('login-error');
 
-loginForm.addEventListener('submit', async (e) => {
+loginForm?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const username = document.getElementById('login-username').value.trim();
   const password = document.getElementById('login-password').value;
@@ -218,8 +247,9 @@ loginForm.addEventListener('submit', async (e) => {
       method: 'POST',
       body: JSON.stringify({ username, password }),
     });
-    jwtToken = data.token || data.accessToken || data.jwt || data;
-    currentUser = username;
+    const token = data?.token || data?.accessToken || data?.jwt || data;
+    if (!token || typeof token !== 'string') throw new Error('Respuesta de login inválida.');
+    saveSession(token, username);
     setApiStatus(true);
     enterApp();
   } catch (err) {
@@ -230,39 +260,41 @@ loginForm.addEventListener('submit', async (e) => {
 });
 
 function showLoginError(msg) {
+  if (!loginError) return;
   loginError.textContent = msg;
   loginError.classList.remove('hidden');
 }
 function setLoginLoading(loading) {
   const btn = document.getElementById('login-btn');
-  btn.querySelector('.btn-text').classList.toggle('hidden', loading);
-  btn.querySelector('.btn-spinner').classList.toggle('hidden', !loading);
+  if (!btn) return;
+  btn.querySelector('.btn-text')?.classList.toggle('hidden', loading);
+  btn.querySelector('.btn-spinner')?.classList.toggle('hidden', !loading);
   btn.disabled = loading;
 }
 
-// Toggle password visibility
-document.getElementById('toggle-pwd').addEventListener('click', () => {
+document.getElementById('toggle-pwd')?.addEventListener('click', () => {
   const inp = document.getElementById('login-password');
-  inp.type = inp.type === 'password' ? 'text' : 'password';
+  if (inp) inp.type = inp.type === 'password' ? 'text' : 'password';
 });
 
 function enterApp() {
-  document.getElementById('login-screen').classList.add('hidden');
-  document.getElementById('app').classList.remove('hidden');
+  document.getElementById('login-screen')?.classList.add('hidden');
+  document.getElementById('app')?.classList.remove('hidden');
   const initials = (currentUser || 'A').charAt(0).toUpperCase();
-  document.getElementById('user-avatar').textContent = initials;
-  document.getElementById('sidebar-username').textContent = currentUser || 'Usuario';
+  const avatar = document.getElementById('user-avatar');
+  if (avatar) avatar.textContent = initials;
+  const userLabel = document.getElementById('sidebar-username');
+  if (userLabel) userLabel.textContent = currentUser || 'Usuario';
   navigateTo('dashboard');
 }
 
-// Logout
-document.getElementById('logout-btn').addEventListener('click', () => {
-  jwtToken = null;
-  currentUser = null;
-  document.getElementById('app').classList.add('hidden');
-  document.getElementById('login-screen').classList.remove('hidden');
-  document.getElementById('login-form').reset();
-  loginError.classList.add('hidden');
+document.getElementById('logout-btn')?.addEventListener('click', () => {
+  clearSession();
+  document.getElementById('app')?.classList.add('hidden');
+  document.getElementById('login-screen')?.classList.remove('hidden');
+  document.getElementById('login-form')?.reset();
+  if (loginError) loginError.classList.add('hidden');
+  showToast('Sesión cerrada correctamente.', 'info');
 });
 
 /* ─────────────────────────────────────────────────────
@@ -302,14 +334,15 @@ function animateCount(id, target) {
 
 function renderRecentMovimientos(movimientos) {
   const container = document.getElementById('recent-movimientos');
+  if (!container) return;
   const recent = movimientos.slice(-5).reverse();
   if (!recent.length) { container.innerHTML = '<p style="color:var(--clr-txt-muted);font-size:.85rem;text-align:center;padding:1rem;">Sin movimientos registrados</p>'; return; }
   const colors = { ENTRADA: '#22c55e', SALIDA: '#ef4444', TRANSFERENCIA: '#3b82f6' };
   const bgs = { ENTRADA: '#f0fdf4', SALIDA: '#fef2f2', TRANSFERENCIA: '#eff6ff' };
   container.innerHTML = recent.map(m => `
     <div class="recent-item">
-      <div class="recent-item-icon" style="background:${bgs[m.tipoMovimiento]||'#f5f4f2'};color:${colors[m.tipoMovimiento]||'#78716c'};">
-        ${(m.tipoMovimiento||'?').charAt(0)}
+      <div class="recent-item-icon" style="background:${bgs[m.tipoMovimiento] || '#f5f4f2'};color:${colors[m.tipoMovimiento] || '#78716c'};">
+        ${(m.tipoMovimiento || '?').charAt(0)}
       </div>
       <div class="recent-item-info">
         <div class="recent-item-title">${escapeHtml(m.tipoMovimiento)} — ID #${m.id}</div>
@@ -322,6 +355,7 @@ function renderRecentMovimientos(movimientos) {
 
 function renderLowStock(productos) {
   const container = document.getElementById('low-stock-list');
+  if (!container) return;
   if (!productos.length) { container.innerHTML = '<p style="color:var(--clr-green);font-size:.85rem;text-align:center;padding:1rem;">✓ Todo el stock es suficiente</p>'; return; }
   container.innerHTML = productos.map(p => `
     <div class="recent-item">
@@ -355,6 +389,7 @@ async function loadBodegas() {
 
 function renderBodegasTable(data) {
   const tbody = document.getElementById('tbody-bodegas');
+  if (!tbody) return;
   if (!data.length) { tbody.innerHTML = `<tr><td colspan="6"><div class="table-loading">No hay bodegas registradas</div></td></tr>`; return; }
   tbody.innerHTML = data.map(b => `
     <tr>
@@ -377,8 +412,7 @@ function renderBodegasTable(data) {
   `).join('');
 }
 
-// Search
-document.getElementById('search-bodegas').addEventListener('input', (e) => {
+document.getElementById('search-bodegas')?.addEventListener('input', (e) => {
   const q = e.target.value.toLowerCase();
   renderBodegasTable(bodegasData.filter(b =>
     b.nombre.toLowerCase().includes(q) ||
@@ -387,8 +421,7 @@ document.getElementById('search-bodegas').addEventListener('input', (e) => {
   ));
 });
 
-// New
-document.getElementById('btn-nueva-bodega').addEventListener('click', () => {
+document.getElementById('btn-nueva-bodega')?.addEventListener('click', () => {
   document.getElementById('form-bodega').reset();
   document.getElementById('bodega-id').value = '';
   document.getElementById('modal-bodega-title').textContent = 'Nueva Bodega';
@@ -396,7 +429,6 @@ document.getElementById('btn-nueva-bodega').addEventListener('click', () => {
   openModal('modal-bodega');
 });
 
-// Edit
 function editBodega(id) {
   const b = bodegasData.find(x => x.id === id);
   if (!b) return;
@@ -410,12 +442,11 @@ function editBodega(id) {
   openModal('modal-bodega');
 }
 
-// Save
-document.getElementById('form-bodega').addEventListener('submit', async (e) => {
+document.getElementById('form-bodega')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const id = document.getElementById('bodega-id').value;
   const body = {
-    nombre:    document.getElementById('bodega-nombre').value.trim(),
+    nombre: document.getElementById('bodega-nombre').value.trim(),
     ubicacion: document.getElementById('bodega-ubicacion').value.trim(),
     capacidad: parseInt(document.getElementById('bodega-capacidad').value),
     encargado: document.getElementById('bodega-encargado').value.trim(),
@@ -461,6 +492,7 @@ async function loadProductos() {
 
 function renderProductosTable(data) {
   const tbody = document.getElementById('tbody-productos');
+  if (!tbody) return;
   if (!data.length) { tbody.innerHTML = `<tr><td colspan="6"><div class="table-loading">No hay productos registrados</div></td></tr>`; return; }
   tbody.innerHTML = data.map(p => `
     <tr>
@@ -483,7 +515,7 @@ function renderProductosTable(data) {
   `).join('');
 }
 
-document.getElementById('search-productos').addEventListener('input', (e) => {
+document.getElementById('search-productos')?.addEventListener('input', (e) => {
   const q = e.target.value.toLowerCase();
   const base = showingLowStock ? productosData.filter(p => p.stock < 10) : productosData;
   renderProductosTable(base.filter(p =>
@@ -492,7 +524,7 @@ document.getElementById('search-productos').addEventListener('input', (e) => {
   ));
 });
 
-document.getElementById('btn-stock-bajo').addEventListener('click', async () => {
+document.getElementById('btn-stock-bajo')?.addEventListener('click', async () => {
   showingLowStock = !showingLowStock;
   const btn = document.getElementById('btn-stock-bajo');
   if (showingLowStock) {
@@ -509,7 +541,7 @@ document.getElementById('btn-stock-bajo').addEventListener('click', async () => 
   }
 });
 
-document.getElementById('btn-nuevo-producto').addEventListener('click', () => {
+document.getElementById('btn-nuevo-producto')?.addEventListener('click', () => {
   document.getElementById('form-producto').reset();
   document.getElementById('producto-id').value = '';
   document.getElementById('modal-producto-title').textContent = 'Nuevo Producto';
@@ -530,14 +562,14 @@ function editProducto(id) {
   openModal('modal-producto');
 }
 
-document.getElementById('form-producto').addEventListener('submit', async (e) => {
+document.getElementById('form-producto')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const id = document.getElementById('producto-id').value;
   const body = {
-    nombre:    document.getElementById('producto-nombre').value.trim(),
+    nombre: document.getElementById('producto-nombre').value.trim(),
     categoria: document.getElementById('producto-categoria').value.trim(),
-    stock:     parseInt(document.getElementById('producto-stock').value),
-    precio:    parseFloat(document.getElementById('producto-precio').value),
+    stock: parseInt(document.getElementById('producto-stock').value),
+    precio: parseFloat(document.getElementById('producto-precio').value),
   };
   if (!body.nombre || !body.categoria || isNaN(body.stock) || isNaN(body.precio)) {
     showModalError('producto-error', 'Completa todos los campos obligatorios.');
@@ -579,6 +611,7 @@ async function loadMovimientos() {
 
 function renderMovimientosTable(data) {
   const tbody = document.getElementById('tbody-movimientos');
+  if (!tbody) return;
   if (!data.length) { tbody.innerHTML = `<tr><td colspan="7"><div class="table-loading">No hay movimientos registrados</div></td></tr>`; return; }
   tbody.innerHTML = data.map(m => {
     const tipo = m.tipoMovimiento || '—';
@@ -602,13 +635,13 @@ function renderMovimientosTable(data) {
   }).join('');
 }
 
-document.getElementById('search-movimientos').addEventListener('input', (e) => {
+document.getElementById('search-movimientos')?.addEventListener('input', (e) => {
   const q = e.target.value.toLowerCase();
   const tipo = document.getElementById('filter-tipo-movimiento').value;
   filterMovimientos(q, tipo);
 });
 
-document.getElementById('filter-tipo-movimiento').addEventListener('change', (e) => {
+document.getElementById('filter-tipo-movimiento')?.addEventListener('change', (e) => {
   const q = document.getElementById('search-movimientos').value.toLowerCase();
   filterMovimientos(q, e.target.value);
 });
@@ -633,7 +666,7 @@ function verDetalleMovimiento(id) {
     ? `<div class="detail-section">Productos</div>
        <table class="data-table" style="margin-top:.25rem">
          <thead><tr><th>Producto ID</th><th>Nombre</th><th>Cantidad</th></tr></thead>
-         <tbody>${detalles.map(d => `<tr><td>#${d.producto?.id||d.productoId||'—'}</td><td>${escapeHtml(d.producto?.nombre||'—')}</td><td>${d.cantidad}</td></tr>`).join('')}</tbody>
+         <tbody>${detalles.map(d => `<tr><td>#${d.producto?.id || d.productoId || '—'}</td><td>${escapeHtml(d.producto?.nombre || '—')}</td><td>${d.cantidad}</td></tr>`).join('')}</tbody>
        </table>`
     : '<p style="color:var(--clr-txt-muted);font-size:.85rem">Sin detalles de productos</p>';
   document.getElementById('modal-detalle-title').textContent = `Movimiento #${m.id}`;
@@ -651,8 +684,7 @@ function verDetalleMovimiento(id) {
   openModal('modal-detalle');
 }
 
-// Registrar movimiento
-document.getElementById('btn-nuevo-movimiento').addEventListener('click', () => {
+document.getElementById('btn-nuevo-movimiento')?.addEventListener('click', () => {
   document.getElementById('form-movimiento').reset();
   document.getElementById('detalles-container').innerHTML = `
     <div class="detalle-row" data-index="0">
@@ -666,7 +698,7 @@ document.getElementById('btn-nuevo-movimiento').addEventListener('click', () => 
   openModal('modal-movimiento');
 });
 
-document.getElementById('btn-add-detalle').addEventListener('click', () => {
+document.getElementById('btn-add-detalle')?.addEventListener('click', () => {
   const container = document.getElementById('detalles-container');
   const idx = container.children.length;
   const div = document.createElement('div');
@@ -687,7 +719,7 @@ function removeDetalle(btn) {
   if (container.children.length > 1) row.remove();
 }
 
-document.getElementById('form-movimiento').addEventListener('submit', async (e) => {
+document.getElementById('form-movimiento')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const tipo = document.getElementById('mov-tipo').value;
   const usuarioId = document.getElementById('mov-usuario').value;
@@ -739,13 +771,14 @@ async function loadAuditoria() {
 
 function renderAuditoriaTable(data) {
   const tbody = document.getElementById('tbody-auditoria');
+  if (!tbody) return;
   if (!data.length) { tbody.innerHTML = `<tr><td colspan="7"><div class="table-loading">No hay registros de auditoría</div></td></tr>`; return; }
   tbody.innerHTML = data.map(a => {
     const op = (a.tipoOperacion || '').toLowerCase();
     return `
     <tr>
       <td><span style="font-weight:600;color:var(--clr-txt-muted)">#${a.id}</span></td>
-      <td><span class="badge badge-${op}">${a.tipoOperacion||'—'}</span></td>
+      <td><span class="badge badge-${op}">${a.tipoOperacion || '—'}</span></td>
       <td>${formatDate(a.fechaHora)}</td>
       <td style="font-weight:500">${escapeHtml(a.usuario)}</td>
       <td>${escapeHtml(a.entidadAfectada)}</td>
@@ -759,15 +792,16 @@ function renderAuditoriaTable(data) {
   }).join('');
 }
 
-document.getElementById('search-auditoria').addEventListener('input', (e) => {
+document.getElementById('search-auditoria')?.addEventListener('input', (e) => {
   const q = e.target.value.toLowerCase();
   const op = document.getElementById('filter-tipo-operacion').value;
   filterAuditoria(q, op);
 });
-document.getElementById('filter-tipo-operacion').addEventListener('change', (e) => {
+document.getElementById('filter-tipo-operacion')?.addEventListener('change', (e) => {
   const q = document.getElementById('search-auditoria').value.toLowerCase();
   filterAuditoria(q, e.target.value);
 });
+
 function filterAuditoria(q, op) {
   let data = auditoriaData;
   if (op) data = data.filter(a => a.tipoOperacion === op);
@@ -817,6 +851,7 @@ async function loadUsuarios() {
 
 function renderUsuariosTable(data) {
   const tbody = document.getElementById('tbody-usuarios');
+  if (!tbody) return;
   if (!data.length) { tbody.innerHTML = `<tr><td colspan="4"><div class="table-loading">No hay usuarios registrados</div></td></tr>`; return; }
   tbody.innerHTML = data.map(u => `
     <tr>
@@ -824,7 +859,7 @@ function renderUsuariosTable(data) {
       <td style="font-weight:500">
         <div style="display:flex;align-items:center;gap:.5rem">
           <div style="width:28px;height:28px;background:var(--clr-sidebar-bg);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;flex-shrink:0">
-            ${(u.username||'?').charAt(0).toUpperCase()}
+            ${(u.username || '?').charAt(0).toUpperCase()}
           </div>
           ${escapeHtml(u.username)}
         </div>
@@ -844,12 +879,12 @@ function renderUsuariosTable(data) {
   `).join('');
 }
 
-document.getElementById('search-usuarios').addEventListener('input', (e) => {
+document.getElementById('search-usuarios')?.addEventListener('input', (e) => {
   const q = e.target.value.toLowerCase();
   renderUsuariosTable(usuariosData.filter(u => u.username.toLowerCase().includes(q)));
 });
 
-document.getElementById('btn-nuevo-usuario').addEventListener('click', () => {
+document.getElementById('btn-nuevo-usuario')?.addEventListener('click', () => {
   document.getElementById('form-usuario').reset();
   document.getElementById('usuario-id').value = '';
   document.getElementById('modal-usuario-title').textContent = 'Nuevo Usuario';
@@ -871,12 +906,12 @@ function editUsuario(id) {
   openModal('modal-usuario');
 }
 
-document.getElementById('form-usuario').addEventListener('submit', async (e) => {
+document.getElementById('form-usuario')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const id = document.getElementById('usuario-id').value;
   const body = {
     username: document.getElementById('usuario-username').value.trim(),
-    rol:      document.getElementById('usuario-rol').value,
+    rol: document.getElementById('usuario-rol').value,
   };
   if (!id) {
     body.password = document.getElementById('usuario-password').value;
@@ -925,7 +960,7 @@ function confirmDelete(type, id, name) {
   openModal('modal-confirm');
 }
 
-document.getElementById('btn-confirm-delete').addEventListener('click', () => {
+document.getElementById('btn-confirm-delete')?.addEventListener('click', () => {
   if (deleteCallback) deleteCallback();
 });
 
@@ -956,7 +991,7 @@ function showTableError(tbodyId, cols, msg) {
 }
 
 /* ─────────────────────────────────────────────────────
-   INIT — check if token already in sessionStorage
+   INIT — Restaurar sesión desde sessionStorage
    ───────────────────────────────────────────────────── */
 (function init() {
   const saved = sessionStorage.getItem('logitrack_token');
@@ -967,30 +1002,3 @@ function showTableError(tbodyId, cols, msg) {
     enterApp();
   }
 })();
-
-// Persist token in sessionStorage on login success (patch enterApp)
-const originalEnterApp = window.enterApp;
-window.addEventListener('DOMContentLoaded', () => {
-  const origLogin = loginForm.onsubmit;
-});
-
-// Patch to persist session
-const _origApiFetch = apiFetch;
-// Store token when login succeeds
-loginForm.addEventListener('submit', () => {}, { capture: true }); // placeholder
-
-// Save token & user after successful login
-const origFormSubmit = loginForm.onsubmit;
-loginForm.addEventListener('submit', () => {
-  setTimeout(() => {
-    if (jwtToken) {
-      sessionStorage.setItem('logitrack_token', jwtToken);
-      sessionStorage.setItem('logitrack_user', currentUser || '');
-    }
-  }, 500);
-});
-
-document.getElementById('logout-btn').addEventListener('click', () => {
-  sessionStorage.removeItem('logitrack_token');
-  sessionStorage.removeItem('logitrack_user');
-}, { capture: true });

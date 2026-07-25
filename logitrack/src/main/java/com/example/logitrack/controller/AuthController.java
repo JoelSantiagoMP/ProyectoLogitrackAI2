@@ -1,15 +1,17 @@
-
 package com.example.logitrack.controller;
 
 import com.example.logitrack.dto.JwtAuthResponse;
 import com.example.logitrack.dto.LoginRequest;
 import com.example.logitrack.security.JwtTokenProvider;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
 
 @RestController
 @RequestMapping("/auth")
@@ -24,23 +26,28 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<JwtAuthResponse> authenticateUser(@RequestBody LoginRequest loginDto) {
-        
-        // 1. Validamos que el usuario y la contraseña sean correctos
-        Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(
-                        loginDto.getUsername(),
-                        loginDto.getPassword()
-                )
-        );
+    public ResponseEntity<?> authenticateUser(@RequestBody LoginRequest loginDto) {
+        try {
+            // 1. Validamos que el usuario y la contraseña sean correctos
+            Authentication authentication = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(
+                            loginDto.getUsername(),
+                            loginDto.getPassword()));
 
-        // 2. Establecemos la seguridad en el contexto actual
-        SecurityContextHolder.getContext().setAuthentication(authentication);
+            // 2. Establecemos la seguridad en el contexto actual
+            SecurityContextHolder.getContext().setAuthentication(authentication);
 
-        // 3. Fabricamos el token JWT
-        String token = tokenProvider.generarToken(authentication);
+            // 3. Fabricamos el token JWT
+            String token = tokenProvider.generarToken(authentication);
 
-        // 4. Se lo enviamos al usuario en formato JSON
-        return ResponseEntity.ok(new JwtAuthResponse(token));
+            // 4. Se lo enviamos al usuario en formato JSON
+            return ResponseEntity.ok(new JwtAuthResponse(token));
+
+        } catch (Exception e) {
+            // Imprime la traza completa del error en la consola de tu IDE
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Error interno al generar token: " + e.getMessage()));
+        }
     }
 }

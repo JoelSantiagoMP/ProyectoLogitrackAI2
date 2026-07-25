@@ -20,11 +20,11 @@ public class MovimientoService {
     private final AuditoriaService auditoriaService;
 
     public MovimientoService(MovimientoRepository movimientoRepository,
-                             ProductoRepository productoRepository,
-                             BodegaRepository bodegaRepository,
-                             UsuarioRepository usuarioRepository,
-                             InventarioBodegaRepository inventarioBodegaRepository,
-                             AuditoriaService auditoriaService) {
+            ProductoRepository productoRepository,
+            BodegaRepository bodegaRepository,
+            UsuarioRepository usuarioRepository,
+            InventarioBodegaRepository inventarioBodegaRepository,
+            AuditoriaService auditoriaService) {
         this.movimientoRepository = movimientoRepository;
         this.productoRepository = productoRepository;
         this.bodegaRepository = bodegaRepository;
@@ -79,7 +79,8 @@ public class MovimientoService {
 
         for (DetalleMovimiento detalle : movimiento.getDetalles()) {
             Producto producto = productoRepository.findById(detalle.getProducto().getId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Producto no encontrado: " + detalle.getProducto().getId()));
+                    .orElseThrow(() -> new ResourceNotFoundException(
+                            "Producto no encontrado: " + detalle.getProducto().getId()));
 
             detalle.setProducto(producto);
             detalle.setMovimiento(movimiento);
@@ -101,8 +102,7 @@ public class MovimientoService {
 
         auditoriaService.registrarAuditoria(
                 TipoOperacion.INSERT, usuarioResponsable, "Movimiento", null,
-                "Tipo: " + guardado.getTipoMovimiento() + ", Detalles: " + resumenDetalles.toString().trim()
-        );
+                "Tipo: " + guardado.getTipoMovimiento() + ", Detalles: " + resumenDetalles.toString().trim());
 
         return guardado;
     }
@@ -124,10 +124,9 @@ public class MovimientoService {
 
     @Transactional(readOnly = true)
     public List<Movimiento> obtenerPorBodegaId(Long bodegaId) {
-        // Se busca en bodegaOrigen o bodegaDestino para traer todos los movimientos asociados a la bodega
         return movimientoRepository.findByBodegaOrigenIdOrBodegaDestinoId(bodegaId, bodegaId);
     }
-    
+
     private void validarBodegasPorTipo(TipoMovimiento tipo, Bodega origen, Bodega destino) {
         if (tipo == TipoMovimiento.ENTRADA && destino == null) {
             throw new IllegalArgumentException("Una entrada requiere bodega destino.");
@@ -142,17 +141,25 @@ public class MovimientoService {
 
     private void agregarInventario(Bodega bodega, Producto producto, int cantidad) {
         InventarioBodega inv = inventarioBodegaRepository.findByBodegaIdAndProductoId(bodega.getId(), producto.getId())
-                .orElse(InventarioBodega.builder().bodega(bodega).producto(producto).cantidad(0).build());
+                .orElseGet(() -> {
+                    InventarioBodega nuevo = new InventarioBodega();
+                    nuevo.setBodega(bodega);
+                    nuevo.setProducto(producto);
+                    nuevo.setCantidad(0);
+                    return nuevo;
+                });
         inv.setCantidad(inv.getCantidad() + cantidad);
         inventarioBodegaRepository.save(inv);
     }
 
     private void descontarInventario(Bodega bodega, Producto producto, int cantidad) {
         InventarioBodega inv = inventarioBodegaRepository.findByBodegaIdAndProductoId(bodega.getId(), producto.getId())
-                .orElseThrow(() -> new IllegalArgumentException("El producto " + producto.getNombre() + " no tiene stock en la bodega origen."));
-        
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "El producto " + producto.getNombre() + " no tiene stock en la bodega origen."));
+
         if (inv.getCantidad() < cantidad) {
-            throw new IllegalArgumentException("Stock insuficiente de " + producto.getNombre() + " en la bodega. Disponible: " + inv.getCantidad());
+            throw new IllegalArgumentException("Stock insuficiente de " + producto.getNombre()
+                    + " en la bodega. Disponible: " + inv.getCantidad());
         }
         inv.setCantidad(inv.getCantidad() - cantidad);
         inventarioBodegaRepository.save(inv);

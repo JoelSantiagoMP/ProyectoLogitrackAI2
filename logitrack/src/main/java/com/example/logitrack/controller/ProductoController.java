@@ -25,13 +25,19 @@ public class ProductoController {
         return ResponseEntity.ok(productoService.obtenerTodos());
     }
 
+    @GetMapping("/stock-bajo")
+    public ResponseEntity<List<Producto>> obtenerProductosStockBajo() {
+        return ResponseEntity.ok(productoService.obtenerProductosStockBajo());
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<Producto> obtenerProductoPorId(@PathVariable Long id) {
         return ResponseEntity.ok(productoService.obtenerPorId(id));
     }
 
     @PostMapping
-    public ResponseEntity<Producto> crearProducto(@Valid @RequestBody Producto producto, Authentication authentication) {
+    public ResponseEntity<Producto> crearProducto(@Valid @RequestBody Producto producto,
+            Authentication authentication) {
         String username = authentication != null ? authentication.getName() : "SYSTEM";
         Producto creado = productoService.crearProducto(producto, username);
         return new ResponseEntity<>(creado, HttpStatus.CREATED);
@@ -39,8 +45,8 @@ public class ProductoController {
 
     @PutMapping("/{id}")
     public ResponseEntity<Producto> actualizarProducto(@PathVariable Long id,
-                                                         @Valid @RequestBody Producto producto,
-                                                         Authentication authentication) {
+            @Valid @RequestBody Producto producto,
+            Authentication authentication) {
         String username = authentication != null ? authentication.getName() : "SYSTEM";
         Producto actualizado = productoService.actualizarProducto(id, producto, username);
         return ResponseEntity.ok(actualizado);
@@ -55,7 +61,6 @@ public class ProductoController {
 
     @GetMapping("/categoria/{categoria}")
     public ResponseEntity<List<Producto>> obtenerProductosPorCategoria(@PathVariable String categoria) {
-        // Asegúrate de tener findByCategoriaIgnoreCase en ProductoRepository
         return ResponseEntity.ok(productoService.obtenerPorCategoria(categoria));
     }
 }

@@ -30,7 +30,8 @@ public interface InventarioBodegaRepository extends JpaRepository<InventarioBode
     List<InventarioBodega> findStockBajo(@Param("limiteStock") Integer limiteStock);
 
     /**
-     * Calcula la suma total de existencias de un producto distribuidas en todas las bodegas.
+     * Calcula la suma total de existencias de un producto distribuidas en todas las
+     * bodegas.
      */
     @Query("SELECT COALESCE(SUM(i.cantidad), 0) FROM InventarioBodega i WHERE i.producto.id = :productoId")
     Integer obtenerStockTotalPorProducto(@Param("productoId") Long productoId);

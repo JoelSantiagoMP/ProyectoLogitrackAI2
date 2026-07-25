@@ -1,5 +1,6 @@
 package com.example.logitrack.controller;
 
+import com.example.logitrack.dto.BodegaDTO;
 import com.example.logitrack.model.Bodega;
 import com.example.logitrack.service.BodegaService;
 import jakarta.validation.Valid;
@@ -36,18 +37,18 @@ public class BodegaController {
     }
 
     @PostMapping
-    public ResponseEntity<Bodega> crearBodega(@Valid @RequestBody Bodega bodega, Authentication authentication) {
+    public ResponseEntity<Bodega> crearBodega(@Valid @RequestBody BodegaDTO dto, Authentication authentication) {
         String username = authentication != null ? authentication.getName() : "SYSTEM";
-        Bodega creada = bodegaService.crearBodega(bodega, username);
+        Bodega creada = bodegaService.crearBodega(dto, username);
         return new ResponseEntity<>(creada, HttpStatus.CREATED);
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<Bodega> actualizarBodega(@PathVariable Long id,
-                                                     @Valid @RequestBody Bodega bodega,
-                                                     Authentication authentication) {
+            @Valid @RequestBody BodegaDTO dto,
+            Authentication authentication) {
         String username = authentication != null ? authentication.getName() : "SYSTEM";
-        Bodega actualizada = bodegaService.actualizarBodega(id, bodega, username);
+        Bodega actualizada = bodegaService.actualizarBodega(id, dto, username);
         return ResponseEntity.ok(actualizada);
     }
 

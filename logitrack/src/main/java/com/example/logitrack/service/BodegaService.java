@@ -1,5 +1,6 @@
 package com.example.logitrack.service;
 
+import com.example.logitrack.dto.BodegaDTO;
 import com.example.logitrack.exception.ResourceNotFoundException;
 import com.example.logitrack.model.Bodega;
 import com.example.logitrack.model.TipoOperacion;
@@ -18,9 +19,9 @@ public class BodegaService {
     private final AuditoriaService auditoriaService;
     private final UsuarioRepository usuarioRepository;
 
-    public BodegaService(BodegaRepository bodegaRepository, 
-                         AuditoriaService auditoriaService, 
-                         UsuarioRepository usuarioRepository) {
+    public BodegaService(BodegaRepository bodegaRepository,
+            AuditoriaService auditoriaService,
+            UsuarioRepository usuarioRepository) {
         this.bodegaRepository = bodegaRepository;
         this.auditoriaService = auditoriaService;
         this.usuarioRepository = usuarioRepository;
@@ -44,13 +45,27 @@ public class BodegaService {
     }
 
     @Transactional
-    public Bodega crearBodega(Bodega bodega, String username) {
-        if (bodegaRepository.existsByNombre(bodega.getNombre())) {
-            throw new IllegalArgumentException("Ya existe una bodega con el nombre: " + bodega.getNombre());
+    public Bodega crearBodega(BodegaDTO dto, String username) {
+        if (bodegaRepository.existsByNombre(dto.getNombre())) {
+            throw new IllegalArgumentException("Ya existe una bodega con el nombre: " + dto.getNombre());
         }
 
         Usuario usuarioResponsable = usuarioRepository.findByUsername(username)
                 .orElseThrow(() -> new ResourceNotFoundException("Usuario responsable no encontrado: " + username));
+
+        Bodega bodega = new Bodega();
+        bodega.setNombre(dto.getNombre());
+        bodega.setUbicacion(dto.getUbicacion());
+        bodega.setCapacidad(dto.getCapacidad());
+
+        if (dto.getEncargadoId() != null) {
+            Usuario encargadoReal = usuarioRepository.findById(dto.getEncargadoId())
+                    .orElseThrow(() -> new ResourceNotFoundException(
+                            "El usuario encargado no existe con ID: " + dto.getEncargadoId()));
+            bodega.setEncargado(encargadoReal);
+        } else {
+            bodega.setEncargado(usuarioResponsable);
+        }
 
         Bodega guardada = bodegaRepository.save(bodega);
 
@@ -59,36 +74,43 @@ public class BodegaService {
                 usuarioResponsable,
                 "Bodega",
                 null,
-                guardada.getNombre() + " (Ubicación: " + guardada.getUbicacion() + ", Capacidad: " + guardada.getCapacidad() + ")"
-        );
+                guardada.getNombre() + " (Ubicación: " + guardada.getUbicacion() + ", Capacidad: "
+                        + guardada.getCapacidad() + ")");
 
         return guardada;
     }
 
     @Transactional
-    public Bodega actualizarBodega(Long id, Bodega bodegaActualizada, String username) {
+    public Bodega actualizarBodega(Long id, BodegaDTO dto, String username) {
         Bodega bodegaExistente = obtenerPorId(id);
-        
+
         Usuario usuarioResponsable = usuarioRepository.findByUsername(username)
                 .orElseThrow(() -> new ResourceNotFoundException("Usuario responsable no encontrado: " + username));
-        
-        String valorAnterior = bodegaExistente.getNombre() + " (Ubicación: " + bodegaExistente.getUbicacion() + ", Capacidad: " + bodegaExistente.getCapacidad() + ")";
 
-        bodegaExistente.setNombre(bodegaActualizada.getNombre());
-        bodegaExistente.setUbicacion(bodegaActualizada.getUbicacion());
-        bodegaExistente.setCapacidad(bodegaActualizada.getCapacidad());
-        bodegaExistente.setEncargado(bodegaActualizada.getEncargado());
+        String valorAnterior = bodegaExistente.getNombre() + " (Ubicación: " + bodegaExistente.getUbicacion()
+                + ", Capacidad: " + bodegaExistente.getCapacidad() + ")";
+
+        bodegaExistente.setNombre(dto.getNombre());
+        bodegaExistente.setUbicacion(dto.getUbicacion());
+        bodegaExistente.setCapacidad(dto.getCapacidad());
+
+        if (dto.getEncargadoId() != null) {
+            Usuario encargadoReal = usuarioRepository.findById(dto.getEncargadoId())
+                    .orElseThrow(() -> new ResourceNotFoundException(
+                            "El usuario encargado no existe con ID: " + dto.getEncargadoId()));
+            bodegaExistente.setEncargado(encargadoReal);
+        }
 
         Bodega guardada = bodegaRepository.save(bodegaExistente);
-        String valorNuevo = guardada.getNombre() + " (Ubicación: " + guardada.getUbicacion() + ", Capacidad: " + guardada.getCapacidad() + ")";
+        String valorNuevo = guardada.getNombre() + " (Ubicación: " + guardada.getUbicacion() + ", Capacidad: "
+                + guardada.getCapacidad() + ")";
 
         auditoriaService.registrarAuditoria(
                 TipoOperacion.UPDATE,
                 usuarioResponsable,
                 "Bodega",
                 valorAnterior,
-                valorNuevo
-        );
+                valorNuevo);
 
         return guardada;
     }
@@ -96,11 +118,12 @@ public class BodegaService {
     @Transactional
     public void eliminarBodega(Long id, String username) {
         Bodega bodega = obtenerPorId(id);
-        
+
         Usuario usuarioResponsable = usuarioRepository.findByUsername(username)
                 .orElseThrow(() -> new ResourceNotFoundException("Usuario responsable no encontrado: " + username));
-        
-        String valorAnterior = bodega.getNombre() + " (Encargado ID: " + bodega.getEncargado().getId() + ")";
+
+        String valorAnterior = bodega.getNombre() + " (Encargado ID: "
+                + (bodega.getEncargado() != null ? bodega.getEncargado().getId() : "N/A") + ")";
 
         bodegaRepository.delete(bodega);
 
@@ -109,7 +132,6 @@ public class BodegaService {
                 usuarioResponsable,
                 "Bodega",
                 valorAnterior,
-                null
-        );
+                null);
     }
 }
