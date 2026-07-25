@@ -30,13 +30,13 @@ public class AuditoriaController {
 
     @GetMapping("/usuario/{usuario}")
     public ResponseEntity<List<Auditoria>> obtenerPorUsuario(@PathVariable String usuario) {
+        // En AuditoriaService y Repository debes implementar: findByUsuarioResponsableUsername(usuario)
         return ResponseEntity.ok(auditoriaService.obtenerPorUsuario(usuario));
     }
 
     @GetMapping("/operacion/{tipoOperacion}")
-    public ResponseEntity<List<Auditoria>> obtenerPorTipoOperacion(@PathVariable String tipoOperacion) {
-        TipoOperacion tipo = TipoOperacion.valueOf(tipoOperacion.toUpperCase());
-        return ResponseEntity.ok(auditoriaService.obtenerPorTipoOperacion(tipo));
+    public ResponseEntity<List<Auditoria>> obtenerPorTipoOperacion(@PathVariable TipoOperacion tipoOperacion) {
+        return ResponseEntity.ok(auditoriaService.obtenerPorTipoOperacion(tipoOperacion));
     }
 
     @GetMapping("/entidad/{entidadAfectada}")

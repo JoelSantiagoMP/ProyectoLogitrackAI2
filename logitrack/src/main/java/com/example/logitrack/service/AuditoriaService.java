@@ -3,6 +3,7 @@ package com.example.logitrack.service;
 import com.example.logitrack.exception.ResourceNotFoundException;
 import com.example.logitrack.model.Auditoria;
 import com.example.logitrack.model.TipoOperacion;
+import com.example.logitrack.model.Usuario;
 import com.example.logitrack.repository.AuditoriaRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,14 +21,13 @@ public class AuditoriaService {
     }
 
     @Transactional
-    public Auditoria registrarAuditoria(TipoOperacion tipoOperacion, String usuario, String entidadAfectada,
-                                         Long entidadId, String valorAnterior, String valorNuevo) {
+    public Auditoria registrarAuditoria(TipoOperacion tipoOperacion, Usuario usuarioResponsable, 
+                                        String entidadAfectada, String valorAnterior, String valorNuevo) {
         Auditoria auditoria = Auditoria.builder()
                 .tipoOperacion(tipoOperacion)
                 .fechaHora(LocalDateTime.now())
-                .usuario(usuario != null ? usuario : "SYSTEM")
+                .usuarioResponsable(usuarioResponsable)
                 .entidadAfectada(entidadAfectada)
-                .entidadId(entidadId)
                 .valorAnterior(valorAnterior)
                 .valorNuevo(valorNuevo)
                 .build();
@@ -47,7 +47,8 @@ public class AuditoriaService {
 
     @Transactional(readOnly = true)
     public List<Auditoria> obtenerPorUsuario(String usuario) {
-        return auditoriaRepository.findByUsuarioIgnoreCase(usuario);
+        // Se busca a través de la relación de la entidad Usuario (su atributo username)
+        return auditoriaRepository.findByUsuarioResponsableUsernameIgnoreCase(usuario);
     }
 
     @Transactional(readOnly = true)

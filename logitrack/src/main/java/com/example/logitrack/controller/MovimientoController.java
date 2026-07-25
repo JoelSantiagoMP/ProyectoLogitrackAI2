@@ -47,10 +47,10 @@ public class MovimientoController {
         return ResponseEntity.ok(movimientoService.obtenerPorRangoFechas(inicio, fin));
     }
 
+    // Spring realiza el casting automático de String a Enum si el string coincide exactamente (ignorando mayúsculas/minúsculas depende de la config)
     @GetMapping("/tipo/{tipo}")
-    public ResponseEntity<List<Movimiento>> obtenerPorTipo(@PathVariable String tipo) {
-        TipoMovimiento tipoEnum = TipoMovimiento.valueOf(tipo.toUpperCase());
-        return ResponseEntity.ok(movimientoService.obtenerPorTipo(tipoEnum));
+    public ResponseEntity<List<Movimiento>> obtenerPorTipo(@PathVariable TipoMovimiento tipo) {
+        return ResponseEntity.ok(movimientoService.obtenerPorTipo(tipo));
     }
 
     @GetMapping("/usuario/{usuarioId}")

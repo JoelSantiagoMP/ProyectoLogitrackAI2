@@ -9,13 +9,11 @@ import java.util.List;
 
 @Repository
 public interface AuditoriaRepository extends JpaRepository<Auditoria, Long> {
-
-    // Auditorías por usuario responsable
-    List<Auditoria> findByUsuarioIgnoreCase(String usuario);
-
-    // Auditorías por tipo de operación (INSERT, UPDATE, DELETE)
+    
+    // Spring Data convierte automáticamente esto en un JOIN con la tabla usuario buscando por el username
+    List<Auditoria> findByUsuarioResponsableUsernameIgnoreCase(String username);
+    
     List<Auditoria> findByTipoOperacion(TipoOperacion tipoOperacion);
-
-    // Auditorías por entidad afectada (ej: "Bodega", "Producto", "Movimiento")
+    
     List<Auditoria> findByEntidadAfectadaIgnoreCase(String entidadAfectada);
 }

@@ -6,9 +6,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
 
-/**
- * Entidad que representa una Bodega de almacenamiento.
- */
 @Entity
 @Table(name = "bodega")
 @Getter
@@ -35,7 +32,8 @@ public class Bodega {
     @Column(nullable = false)
     private Integer capacidad;
 
-    @NotBlank(message = "El encargado es obligatorio")
-    @Column(nullable = false)
-    private String encargado;
+    @NotNull(message = "El encargado es obligatorio")
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "encargado_id", nullable = false)
+    private Usuario encargado;
 }

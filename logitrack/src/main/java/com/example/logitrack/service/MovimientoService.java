@@ -16,17 +16,20 @@ public class MovimientoService {
     private final ProductoRepository productoRepository;
     private final BodegaRepository bodegaRepository;
     private final UsuarioRepository usuarioRepository;
+    private final InventarioBodegaRepository inventarioBodegaRepository;
     private final AuditoriaService auditoriaService;
 
     public MovimientoService(MovimientoRepository movimientoRepository,
                              ProductoRepository productoRepository,
                              BodegaRepository bodegaRepository,
                              UsuarioRepository usuarioRepository,
+                             InventarioBodegaRepository inventarioBodegaRepository,
                              AuditoriaService auditoriaService) {
         this.movimientoRepository = movimientoRepository;
         this.productoRepository = productoRepository;
         this.bodegaRepository = bodegaRepository;
         this.usuarioRepository = usuarioRepository;
+        this.inventarioBodegaRepository = inventarioBodegaRepository;
         this.auditoriaService = auditoriaService;
     }
 
@@ -43,90 +46,61 @@ public class MovimientoService {
 
     @Transactional
     public Movimiento registrarMovimiento(Movimiento movimiento, String username) {
-        // 1. Establecer fecha actual si no viene especificada
         if (movimiento.getFecha() == null) {
             movimiento.setFecha(LocalDateTime.now());
         }
 
-        // 2. Cargar usuario responsable
-        Usuario usuarioResponsable;
-        if (movimiento.getUsuario() != null && movimiento.getUsuario().getId() != null) {
-            usuarioResponsable = usuarioRepository.findById(movimiento.getUsuario().getId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado con id: " + movimiento.getUsuario().getId()));
-        } else {
-            usuarioResponsable = usuarioRepository.findByUsername(username)
-                    .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado con username: " + username));
-        }
+        Usuario usuarioResponsable = usuarioRepository.findByUsername(username)
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado: " + username));
         movimiento.setUsuario(usuarioResponsable);
 
-        // 3. Validar y asociar bodegas según tipo de movimiento
+        Bodega origen = null;
+        Bodega destino = null;
+
         if (movimiento.getBodegaOrigen() != null && movimiento.getBodegaOrigen().getId() != null) {
-            Bodega origen = bodegaRepository.findById(movimiento.getBodegaOrigen().getId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Bodega de origen no encontrada con id: " + movimiento.getBodegaOrigen().getId()));
+            origen = bodegaRepository.findById(movimiento.getBodegaOrigen().getId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Bodega origen no encontrada"));
             movimiento.setBodegaOrigen(origen);
         }
 
         if (movimiento.getBodegaDestino() != null && movimiento.getBodegaDestino().getId() != null) {
-            Bodega destino = bodegaRepository.findById(movimiento.getBodegaDestino().getId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Bodega de destino no encontrada con id: " + movimiento.getBodegaDestino().getId()));
+            destino = bodegaRepository.findById(movimiento.getBodegaDestino().getId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Bodega destino no encontrada"));
             movimiento.setBodegaDestino(destino);
         }
 
-        if (movimiento.getTipoMovimiento() == TipoMovimiento.TRANSFERENCIA) {
-            if (movimiento.getBodegaOrigen() == null || movimiento.getBodegaDestino() == null) {
-                throw new IllegalArgumentException("Una transferencia requiere especificar bodega de origen y destino.");
-            }
-        }
+        validarBodegasPorTipo(movimiento.getTipoMovimiento(), origen, destino);
 
-        // 4. Validar y actualizar stock de productos
         if (movimiento.getDetalles() == null || movimiento.getDetalles().isEmpty()) {
-            throw new IllegalArgumentException("El movimiento debe contener al menos un detalle de producto.");
+            throw new IllegalArgumentException("El movimiento debe contener detalles.");
         }
 
         StringBuilder resumenDetalles = new StringBuilder();
 
         for (DetalleMovimiento detalle : movimiento.getDetalles()) {
-            if (detalle.getProducto() == null || detalle.getProducto().getId() == null) {
-                throw new IllegalArgumentException("Cada detalle debe referenciar un producto existente con ID.");
-            }
-
             Producto producto = productoRepository.findById(detalle.getProducto().getId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Producto no encontrado con id: " + detalle.getProducto().getId()));
+                    .orElseThrow(() -> new ResourceNotFoundException("Producto no encontrado: " + detalle.getProducto().getId()));
 
             detalle.setProducto(producto);
             detalle.setMovimiento(movimiento);
-
             int cantidad = detalle.getCantidad();
-            if (cantidad <= 0) {
-                throw new IllegalArgumentException("La cantidad del producto debe ser mayor a cero.");
-            }
 
             if (movimiento.getTipoMovimiento() == TipoMovimiento.ENTRADA) {
-                producto.setStock(producto.getStock() + cantidad);
+                agregarInventario(destino, producto, cantidad);
             } else if (movimiento.getTipoMovimiento() == TipoMovimiento.SALIDA) {
-                if (producto.getStock() < cantidad) {
-                    throw new IllegalArgumentException("Stock insuficiente para el producto '" + producto.getNombre() +
-                            "'. Disponible: " + producto.getStock() + ", Solicitado: " + cantidad);
-                }
-                producto.setStock(producto.getStock() - cantidad);
+                descontarInventario(origen, producto, cantidad);
+            } else if (movimiento.getTipoMovimiento() == TipoMovimiento.TRANSFERENCIA) {
+                descontarInventario(origen, producto, cantidad);
+                agregarInventario(destino, producto, cantidad);
             }
-            // En TRANSFERENCIA el stock global del producto no cambia, pero enlazamos las bodegas
-
-            productoRepository.save(producto);
 
             resumenDetalles.append("[").append(producto.getNombre()).append(": ").append(cantidad).append("] ");
         }
 
-        // 5. Guardar movimiento (cascada guarda los detalles)
         Movimiento guardado = movimientoRepository.save(movimiento);
 
-        // 6. Registrar en auditoría
         auditoriaService.registrarAuditoria(
-                TipoOperacion.INSERT,
-                usuarioResponsable.getUsername(),
-                "Movimiento",
-                guardado.getId(),
-                null,
+                TipoOperacion.INSERT, usuarioResponsable, "Movimiento", null,
                 "Tipo: " + guardado.getTipoMovimiento() + ", Detalles: " + resumenDetalles.toString().trim()
         );
 
@@ -150,6 +124,37 @@ public class MovimientoService {
 
     @Transactional(readOnly = true)
     public List<Movimiento> obtenerPorBodegaId(Long bodegaId) {
+        // Se busca en bodegaOrigen o bodegaDestino para traer todos los movimientos asociados a la bodega
         return movimientoRepository.findByBodegaOrigenIdOrBodegaDestinoId(bodegaId, bodegaId);
+    }
+    
+    private void validarBodegasPorTipo(TipoMovimiento tipo, Bodega origen, Bodega destino) {
+        if (tipo == TipoMovimiento.ENTRADA && destino == null) {
+            throw new IllegalArgumentException("Una entrada requiere bodega destino.");
+        }
+        if (tipo == TipoMovimiento.SALIDA && origen == null) {
+            throw new IllegalArgumentException("Una salida requiere bodega origen.");
+        }
+        if (tipo == TipoMovimiento.TRANSFERENCIA && (origen == null || destino == null)) {
+            throw new IllegalArgumentException("Transferencia requiere origen y destino.");
+        }
+    }
+
+    private void agregarInventario(Bodega bodega, Producto producto, int cantidad) {
+        InventarioBodega inv = inventarioBodegaRepository.findByBodegaIdAndProductoId(bodega.getId(), producto.getId())
+                .orElse(InventarioBodega.builder().bodega(bodega).producto(producto).cantidad(0).build());
+        inv.setCantidad(inv.getCantidad() + cantidad);
+        inventarioBodegaRepository.save(inv);
+    }
+
+    private void descontarInventario(Bodega bodega, Producto producto, int cantidad) {
+        InventarioBodega inv = inventarioBodegaRepository.findByBodegaIdAndProductoId(bodega.getId(), producto.getId())
+                .orElseThrow(() -> new IllegalArgumentException("El producto " + producto.getNombre() + " no tiene stock en la bodega origen."));
+        
+        if (inv.getCantidad() < cantidad) {
+            throw new IllegalArgumentException("Stock insuficiente de " + producto.getNombre() + " en la bodega. Disponible: " + inv.getCantidad());
+        }
+        inv.setCantidad(inv.getCantidad() - cantidad);
+        inventarioBodegaRepository.save(inv);
     }
 }

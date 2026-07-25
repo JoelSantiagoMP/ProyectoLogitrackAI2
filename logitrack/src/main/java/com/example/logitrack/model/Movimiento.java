@@ -9,9 +9,6 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Entidad que representa las transacciones de movimiento de inventario.
- */
 @Entity
 @Table(name = "movimiento")
 @Getter
@@ -25,7 +22,7 @@ public class Movimiento {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false)
+    @Column(nullable = false, updatable = false)
     private LocalDateTime fecha;
 
     @NotNull(message = "El tipo de movimiento es obligatorio")
@@ -49,4 +46,11 @@ public class Movimiento {
     @JsonIgnoreProperties("movimiento")
     @Builder.Default
     private List<DetalleMovimiento> detalles = new ArrayList<>();
+    
+    @PrePersist
+    protected void onCreate() {
+        if (this.fecha == null) {
+            this.fecha = LocalDateTime.now();
+        }
+    }
 }

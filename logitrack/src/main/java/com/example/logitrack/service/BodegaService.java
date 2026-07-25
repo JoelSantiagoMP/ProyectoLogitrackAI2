@@ -3,7 +3,9 @@ package com.example.logitrack.service;
 import com.example.logitrack.exception.ResourceNotFoundException;
 import com.example.logitrack.model.Bodega;
 import com.example.logitrack.model.TipoOperacion;
+import com.example.logitrack.model.Usuario;
 import com.example.logitrack.repository.BodegaRepository;
+import com.example.logitrack.repository.UsuarioRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,10 +16,14 @@ public class BodegaService {
 
     private final BodegaRepository bodegaRepository;
     private final AuditoriaService auditoriaService;
+    private final UsuarioRepository usuarioRepository;
 
-    public BodegaService(BodegaRepository bodegaRepository, AuditoriaService auditoriaService) {
+    public BodegaService(BodegaRepository bodegaRepository, 
+                         AuditoriaService auditoriaService, 
+                         UsuarioRepository usuarioRepository) {
         this.bodegaRepository = bodegaRepository;
         this.auditoriaService = auditoriaService;
+        this.usuarioRepository = usuarioRepository;
     }
 
     @Transactional(readOnly = true)
@@ -43,13 +49,15 @@ public class BodegaService {
             throw new IllegalArgumentException("Ya existe una bodega con el nombre: " + bodega.getNombre());
         }
 
+        Usuario usuarioResponsable = usuarioRepository.findByUsername(username)
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario responsable no encontrado: " + username));
+
         Bodega guardada = bodegaRepository.save(bodega);
 
         auditoriaService.registrarAuditoria(
                 TipoOperacion.INSERT,
-                username,
+                usuarioResponsable,
                 "Bodega",
-                guardada.getId(),
                 null,
                 guardada.getNombre() + " (Ubicación: " + guardada.getUbicacion() + ", Capacidad: " + guardada.getCapacidad() + ")"
         );
@@ -60,6 +68,10 @@ public class BodegaService {
     @Transactional
     public Bodega actualizarBodega(Long id, Bodega bodegaActualizada, String username) {
         Bodega bodegaExistente = obtenerPorId(id);
+        
+        Usuario usuarioResponsable = usuarioRepository.findByUsername(username)
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario responsable no encontrado: " + username));
+        
         String valorAnterior = bodegaExistente.getNombre() + " (Ubicación: " + bodegaExistente.getUbicacion() + ", Capacidad: " + bodegaExistente.getCapacidad() + ")";
 
         bodegaExistente.setNombre(bodegaActualizada.getNombre());
@@ -72,9 +84,8 @@ public class BodegaService {
 
         auditoriaService.registrarAuditoria(
                 TipoOperacion.UPDATE,
-                username,
+                usuarioResponsable,
                 "Bodega",
-                guardada.getId(),
                 valorAnterior,
                 valorNuevo
         );
@@ -85,15 +96,18 @@ public class BodegaService {
     @Transactional
     public void eliminarBodega(Long id, String username) {
         Bodega bodega = obtenerPorId(id);
-        String valorAnterior = bodega.getNombre() + " (Encargado: " + bodega.getEncargado() + ")";
+        
+        Usuario usuarioResponsable = usuarioRepository.findByUsername(username)
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario responsable no encontrado: " + username));
+        
+        String valorAnterior = bodega.getNombre() + " (Encargado ID: " + bodega.getEncargado().getId() + ")";
 
         bodegaRepository.delete(bodega);
 
         auditoriaService.registrarAuditoria(
                 TipoOperacion.DELETE,
-                username,
+                usuarioResponsable,
                 "Bodega",
-                id,
                 valorAnterior,
                 null
         );

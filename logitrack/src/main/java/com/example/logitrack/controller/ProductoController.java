@@ -53,13 +53,9 @@ public class ProductoController {
         return ResponseEntity.noContent().build();
     }
 
-    @GetMapping("/stock-bajo")
-    public ResponseEntity<List<Producto>> obtenerProductosStockBajo(@RequestParam(required = false, defaultValue = "10") Integer limite) {
-        return ResponseEntity.ok(productoService.obtenerStockBajo(limite));
-    }
-
     @GetMapping("/categoria/{categoria}")
     public ResponseEntity<List<Producto>> obtenerProductosPorCategoria(@PathVariable String categoria) {
+        // Asegúrate de tener findByCategoriaIgnoreCase en ProductoRepository
         return ResponseEntity.ok(productoService.obtenerPorCategoria(categoria));
     }
 }

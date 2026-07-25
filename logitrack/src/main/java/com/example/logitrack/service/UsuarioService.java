@@ -41,15 +41,17 @@ public class UsuarioService {
         if (usuarioRepository.findByUsername(usuario.getUsername()).isPresent()) {
             throw new IllegalArgumentException("Ya existe un usuario con el nombre de usuario: " + usuario.getUsername());
         }
+        
+        Usuario admin = usuarioRepository.findByUsername(adminUsername)
+                .orElseThrow(() -> new ResourceNotFoundException("Admin no encontrado: " + adminUsername));
 
         usuario.setPassword(passwordEncoder.encode(usuario.getPassword()));
         Usuario guardado = usuarioRepository.save(usuario);
 
         auditoriaService.registrarAuditoria(
                 TipoOperacion.INSERT,
-                adminUsername,
+                admin,
                 "Usuario",
-                guardado.getId(),
                 null,
                 "Username: " + guardado.getUsername() + " (Rol: " + guardado.getRol() + ")"
         );
@@ -60,6 +62,10 @@ public class UsuarioService {
     @Transactional
     public Usuario actualizarUsuario(Long id, Usuario usuarioActualizado, String adminUsername) {
         Usuario usuarioExistente = obtenerPorId(id);
+        
+        Usuario admin = usuarioRepository.findByUsername(adminUsername)
+                .orElseThrow(() -> new ResourceNotFoundException("Admin no encontrado: " + adminUsername));
+                
         String valorAnterior = "Username: " + usuarioExistente.getUsername() + " (Rol: " + usuarioExistente.getRol() + ")";
 
         usuarioExistente.setUsername(usuarioActualizado.getUsername());
@@ -75,9 +81,8 @@ public class UsuarioService {
 
         auditoriaService.registrarAuditoria(
                 TipoOperacion.UPDATE,
-                adminUsername,
+                admin,
                 "Usuario",
-                guardado.getId(),
                 valorAnterior,
                 valorNuevo
         );
@@ -88,15 +93,18 @@ public class UsuarioService {
     @Transactional
     public void eliminarUsuario(Long id, String adminUsername) {
         Usuario usuario = obtenerPorId(id);
+        
+        Usuario admin = usuarioRepository.findByUsername(adminUsername)
+                .orElseThrow(() -> new ResourceNotFoundException("Admin no encontrado: " + adminUsername));
+                
         String valorAnterior = "Username: " + usuario.getUsername() + " (Rol: " + usuario.getRol() + ")";
 
         usuarioRepository.delete(usuario);
 
         auditoriaService.registrarAuditoria(
                 TipoOperacion.DELETE,
-                adminUsername,
+                admin,
                 "Usuario",
-                id,
                 valorAnterior,
                 null
         );

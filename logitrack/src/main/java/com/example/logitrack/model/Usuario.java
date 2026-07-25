@@ -3,9 +3,6 @@ package com.example.logitrack.model;
 import jakarta.persistence.*;
 import lombok.*;
 
-/**
- * Entidad que representa a un Usuario/Empleado del sistema.
- */
 @Entity
 @Table(name = "usuario")
 @Getter
@@ -25,6 +22,7 @@ public class Usuario {
     @Column(nullable = false)
     private String password;
 
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private String rol; // ADMIN o EMPLEADO
+    private Rol rol;
 }
