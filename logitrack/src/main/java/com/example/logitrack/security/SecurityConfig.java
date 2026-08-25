@@ -39,6 +39,8 @@ public class SecurityConfig {
                                 "/api/bodegas/**", "/api/productos/**")
                         .permitAll()
                         .requestMatchers("/api/auth/**").permitAll()
+                        // Rol AGENTE (JWT): CustomUserDetailsService asigna ROLE_AGENTE.
+                        // La matriz IQ (consultar/crear BORRADOR/publicar vs aprobar) se aplica en el ciclo verde.
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 

@@ -26,6 +26,10 @@ public class Producto {
     @Transient
     private Integer stock = 0;
 
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "proveedor_principal_id")
+    private Proveedor proveedorPrincipal;
+
     public Producto() {
     }
 
@@ -67,5 +71,13 @@ public class Producto {
 
     public void setStock(Integer stock) {
         this.stock = stock;
+    }
+
+    public Proveedor getProveedorPrincipal() {
+        return proveedorPrincipal;
+    }
+
+    public void setProveedorPrincipal(Proveedor proveedorPrincipal) {
+        this.proveedorPrincipal = proveedorPrincipal;
     }
 }
