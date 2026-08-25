@@ -35,4 +35,13 @@ public interface InventarioBodegaRepository extends JpaRepository<InventarioBode
      */
     @Query("SELECT COALESCE(SUM(i.cantidad), 0) FROM InventarioBodega i WHERE i.producto.id = :productoId")
     Integer obtenerStockTotalPorProducto(@Param("productoId") Long productoId);
+
+    @Query("""
+            SELECT i FROM InventarioBodega i
+            JOIN FETCH i.bodega
+            JOIN FETCH i.producto
+            WHERE (:bodegaId IS NULL OR i.bodega.id = :bodegaId)
+            ORDER BY i.bodega.nombre, i.producto.nombre
+            """)
+    List<InventarioBodega> findInventarioParaReporte(@Param("bodegaId") Long bodegaId);
 }

@@ -1,6 +1,6 @@
 package com.example.logitrack.controller;
 
-import com.example.logitrack.model.Auditoria;
+import com.example.logitrack.dto.AuditoriaDTO;
 import com.example.logitrack.model.TipoOperacion;
 import com.example.logitrack.service.AuditoriaService;
 import org.springframework.http.ResponseEntity;
@@ -19,28 +19,27 @@ public class AuditoriaController {
     }
 
     @GetMapping
-    public ResponseEntity<List<Auditoria>> listarAuditorias() {
+    public ResponseEntity<List<AuditoriaDTO>> listarAuditorias() {
         return ResponseEntity.ok(auditoriaService.obtenerTodas());
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Auditoria> obtenerAuditoriaPorId(@PathVariable Long id) {
+    public ResponseEntity<AuditoriaDTO> obtenerAuditoriaPorId(@PathVariable Long id) {
         return ResponseEntity.ok(auditoriaService.obtenerPorId(id));
     }
 
     @GetMapping("/usuario/{usuario}")
-    public ResponseEntity<List<Auditoria>> obtenerPorUsuario(@PathVariable String usuario) {
-        // En AuditoriaService y Repository debes implementar: findByUsuarioResponsableUsername(usuario)
+    public ResponseEntity<List<AuditoriaDTO>> obtenerPorUsuario(@PathVariable String usuario) {
         return ResponseEntity.ok(auditoriaService.obtenerPorUsuario(usuario));
     }
 
     @GetMapping("/operacion/{tipoOperacion}")
-    public ResponseEntity<List<Auditoria>> obtenerPorTipoOperacion(@PathVariable TipoOperacion tipoOperacion) {
+    public ResponseEntity<List<AuditoriaDTO>> obtenerPorTipoOperacion(@PathVariable TipoOperacion tipoOperacion) {
         return ResponseEntity.ok(auditoriaService.obtenerPorTipoOperacion(tipoOperacion));
     }
 
     @GetMapping("/entidad/{entidadAfectada}")
-    public ResponseEntity<List<Auditoria>> obtenerPorEntidad(@PathVariable String entidadAfectada) {
+    public ResponseEntity<List<AuditoriaDTO>> obtenerPorEntidad(@PathVariable String entidadAfectada) {
         return ResponseEntity.ok(auditoriaService.obtenerPorEntidad(entidadAfectada));
     }
 }

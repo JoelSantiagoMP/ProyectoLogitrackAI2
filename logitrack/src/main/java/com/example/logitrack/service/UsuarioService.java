@@ -52,6 +52,7 @@ public class UsuarioService {
                 TipoOperacion.INSERT,
                 admin,
                 "Usuario",
+                guardado.getId(),
                 null,
                 "Username: " + guardado.getUsername() + " (Rol: " + guardado.getRol() + ")"
         );
@@ -83,6 +84,7 @@ public class UsuarioService {
                 TipoOperacion.UPDATE,
                 admin,
                 "Usuario",
+                guardado.getId(),
                 valorAnterior,
                 valorNuevo
         );
@@ -105,6 +107,7 @@ public class UsuarioService {
                 TipoOperacion.DELETE,
                 admin,
                 "Usuario",
+                usuario.getId(),
                 valorAnterior,
                 null
         );

@@ -1,0 +1,145 @@
+# LogiTrack
+
+Sistema de gestión de bodegas, inventario, movimientos y auditoría para LogiTrack S.A. Incluye API REST con Spring Boot, persistencia JPA/Hibernate sobre PostgreSQL y una interfaz web estática servida por el mismo backend.
+
+## Stack
+
+- Java 17
+- Spring Boot 4.1 (Web, Data JPA, Security, Validation)
+- PostgreSQL (esquema `logitrack`; en este proyecto se usa Supabase)
+- JWT (JJWT) para autenticación
+- OpenAPI / Swagger (`springdoc`)
+- Frontend SPA en `src/main/resources/static/` (HTML, CSS, JavaScript)
+
+## Módulos funcionales
+
+| Módulo | Descripción |
+| --- | --- |
+| Autenticación | Login JWT (`POST /api/auth/login`) |
+| Usuarios | CRUD con roles `ADMIN` y `EMPLEADO` |
+| Bodegas | CRUD de almacenes y encargado |
+| Productos | CRUD; el stock **no** se guarda en `producto`, se calcula desde `inventario_bodega` |
+| Stock inicial | Al crear un producto con stock &gt; 0 se exige una bodega y se inserta en `inventario_bodega` |
+| Movimientos | Entrada, salida y transferencia; actualizan inventario en la misma transacción |
+| Auditoría | INSERT / UPDATE / DELETE con usuario, entidad, id de registro, valor anterior y valor nuevo |
+| Reportes | Inventario por bodega, movimientos filtrados y auditoría filtrada |
+
+## Requisitos
+
+- JDK 17+
+- Maven Wrapper (`./mvnw`) o Maven 3.9+
+- PostgreSQL con el esquema `logitrack` creado
+
+## Configuración
+
+La aplicación lee `logitrack/src/main/resources/application.properties`.
+
+Variables de entorno recomendadas (no subas contraseñas al repositorio):
+
+```bash
+export DB_URL="jdbc:postgresql://HOST:PUERTO/postgres?sslmode=require&currentSchema=logitrack&prepareThreshold=0"
+export DB_USERNAME="tu_usuario"
+export DB_PASSWORD="tu_password"
+```
+
+Notas importantes:
+
+- `prepareThreshold=0` evita errores de prepared statements con el **pooler transaccional** de Supabase (puerto 6543).
+- `spring.jpa.hibernate.ddl-auto=none`: el esquema se gestiona con SQL, no con Hibernate.
+- `spring.sql.init.mode=never`: no se reejecutan `schema.sql` / `data.sql` al arrancar.
+
+Si la tabla `auditoria` ya existía sin la columna de trazabilidad, ejecuta en PostgreSQL:
+
+```sql
+ALTER TABLE logitrack.auditoria ADD COLUMN IF NOT EXISTS entidad_id BIGINT;
+```
+
+## Base de datos
+
+Scripts en `logitrack/database/`:
+
+1. `schema.sql` — crea el esquema `logitrack` y las tablas.
+2. `data.sql` — datos de ejemplo (opcional).
+
+Ejecútalos una vez contra PostgreSQL (cliente SQL, DBeaver, psql o el SQL Editor de Supabase).
+
+Modelo resumido:
+
+- `usuario` → `bodega` (encargado)
+- `producto` + `bodega` → `inventario_bodega` (stock real)
+- `movimiento` + `detalle_movimiento` (entrada / salida / transferencia)
+- `auditoria` (trazabilidad de operaciones)
+
+## Cómo ejecutar
+
+Desde `logitrack/`:
+
+```bash
+chmod +x mvnw
+./mvnw spring-boot:run
+```
+
+- UI: [http://localhost:8080](http://localhost:8080)
+- Swagger UI: [http://localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html)
+- OpenAPI JSON: [http://localhost:8080/v3/api-docs](http://localhost:8080/v3/api-docs)
+
+## Usuarios de prueba (si cargaste `data.sql`)
+
+| Usuario | Rol | Contraseña de ejemplo |
+| --- | --- | --- |
+| `admin_logitrack` | ADMIN | `123456` (según comentario del script; el valor persistido está en BCrypt) |
+| `empleado_1` | EMPLEADO | `123456` (ídem) |
+
+Tras el login, el frontend guarda el JWT en `sessionStorage` y lo envía en `Authorization: Bearer ...`.
+
+## API principal
+
+Prefijo `/api`. Casi todos los recursos requieren JWT; `/api/auth/**` es público.
+
+- `POST /api/auth/login`
+- `GET|POST|PUT|DELETE /api/bodegas`
+- `GET|POST|PUT|DELETE /api/productos` — el POST acepta `stock` y `bodegaId` para inventario inicial
+- `GET /api/productos/stock-bajo`
+- `GET|POST /api/movimientos`
+- `GET|POST|PUT|DELETE /api/usuarios`
+- `GET /api/auditoria` — respuesta en DTO (`usuario`, `entidadId`, valores anterior/nuevo)
+- `GET /api/reportes/inventario?bodegaId=`
+- `GET /api/reportes/movimientos?bodega=&producto=&tipoMovimiento=&fechaInicio=&fechaFin=`
+- `GET /api/reportes/auditoria?entidadAfectada=&fechaInicio=&fechaFin=`
+
+Fechas de reportes en ISO-8601 (`2026-08-24T00:00:00`).
+
+## Decisiones de diseño
+
+1. **Stock por bodega.** El campo `stock` de `Producto` es `@Transient`: se suma `inventario_bodega`. Crear un producto con cantidad inicial escribe esa tabla; los cambios posteriores van por movimientos.
+2. **Transacciones.** Crear movimiento, actualizar inventario y registrar auditoría ocurren en la misma `@Transactional`. Si falla el stock (por ejemplo, salida sin existencias), se hace rollback de todo.
+3. **Auditoría.** Se persiste el usuario responsable (JOIN FETCH / EAGER), el id de la entidad y un resumen textual de valores. La API no serializa el proxy Hibernate ni la contraseña.
+4. **JWT stateless.** Sin sesiones de servidor; el frontend reenvía el token en cada petición.
+
+## Estructura del código
+
+```
+logitrack/
+  database/                 # schema.sql y data.sql
+  src/main/java/com/example/logitrack/
+    controller/
+    dto/
+    model/
+    repository/
+    security/
+    service/
+    exception/
+  src/main/resources/
+    application.properties
+    static/                 # index.html, app.js, style.css
+```
+
+## Pruebas
+
+```bash
+./mvnw test
+```
+
+## Licencia
+
+Proyecto académico de LogiTrack S.A.

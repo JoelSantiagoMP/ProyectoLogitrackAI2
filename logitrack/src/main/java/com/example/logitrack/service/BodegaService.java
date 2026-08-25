@@ -73,6 +73,7 @@ public class BodegaService {
                 TipoOperacion.INSERT,
                 usuarioResponsable,
                 "Bodega",
+                guardada.getId(),
                 null,
                 guardada.getNombre() + " (Ubicación: " + guardada.getUbicacion() + ", Capacidad: "
                         + guardada.getCapacidad() + ")");
@@ -109,6 +110,7 @@ public class BodegaService {
                 TipoOperacion.UPDATE,
                 usuarioResponsable,
                 "Bodega",
+                guardada.getId(),
                 valorAnterior,
                 valorNuevo);
 
@@ -131,6 +133,7 @@ public class BodegaService {
                 TipoOperacion.DELETE,
                 usuarioResponsable,
                 "Bodega",
+                bodega.getId(),
                 valorAnterior,
                 null);
     }

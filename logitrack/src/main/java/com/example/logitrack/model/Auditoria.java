@@ -25,12 +25,15 @@ public class Auditoria {
     @Column(name = "fecha_hora", nullable = false, updatable = false)
     private LocalDateTime fechaHora;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "usuario_responsable_id", nullable = false)
     private Usuario usuarioResponsable;
 
     @Column(name = "entidad_afectada", nullable = false)
     private String entidadAfectada;
+
+    @Column(name = "entidad_id")
+    private Long entidadId;
 
     @Column(name = "valor_anterior", columnDefinition = "TEXT")
     private String valorAnterior;

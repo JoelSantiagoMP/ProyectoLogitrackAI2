@@ -1,5 +1,6 @@
 package com.example.logitrack.controller;
 
+import com.example.logitrack.dto.ProductoRequest;
 import com.example.logitrack.model.Producto;
 import com.example.logitrack.service.ProductoService;
 import jakarta.validation.Valid;
@@ -9,6 +10,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/productos")
@@ -35,20 +37,27 @@ public class ProductoController {
         return ResponseEntity.ok(productoService.obtenerPorId(id));
     }
 
+    @GetMapping("/{id}/inventario/{bodegaId}")
+    public ResponseEntity<Map<String, Integer>> obtenerStockEnBodega(@PathVariable Long id,
+            @PathVariable Long bodegaId) {
+        int cantidad = productoService.obtenerStockEnBodega(id, bodegaId);
+        return ResponseEntity.ok(Map.of("cantidad", cantidad));
+    }
+
     @PostMapping
-    public ResponseEntity<Producto> crearProducto(@Valid @RequestBody Producto producto,
+    public ResponseEntity<Producto> crearProducto(@Valid @RequestBody ProductoRequest request,
             Authentication authentication) {
         String username = authentication != null ? authentication.getName() : "SYSTEM";
-        Producto creado = productoService.crearProducto(producto, username);
+        Producto creado = productoService.crearProducto(request, username);
         return new ResponseEntity<>(creado, HttpStatus.CREATED);
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<Producto> actualizarProducto(@PathVariable Long id,
-            @Valid @RequestBody Producto producto,
+            @Valid @RequestBody ProductoRequest request,
             Authentication authentication) {
         String username = authentication != null ? authentication.getName() : "SYSTEM";
-        Producto actualizado = productoService.actualizarProducto(id, producto, username);
+        Producto actualizado = productoService.actualizarProducto(id, request, username);
         return ResponseEntity.ok(actualizado);
     }
 

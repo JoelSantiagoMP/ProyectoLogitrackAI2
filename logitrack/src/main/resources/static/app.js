@@ -169,12 +169,13 @@ document.addEventListener('keydown', (e) => {
 /* ─────────────────────────────────────────────────────
    SIDEBAR / NAVIGATION
    ───────────────────────────────────────────────────── */
-const pages = ['dashboard', 'bodegas', 'productos', 'movimientos', 'auditoria', 'usuarios'];
+const pages = ['dashboard', 'bodegas', 'productos', 'movimientos', 'reportes', 'auditoria', 'usuarios'];
 const pageTitles = {
   dashboard: ['Dashboard', 'Inicio / Dashboard'],
   bodegas: ['Bodegas', 'Inventario / Bodegas'],
   productos: ['Productos', 'Inventario / Productos'],
   movimientos: ['Movimientos', 'Inventario / Movimientos'],
+  reportes: ['Reportes', 'Inventario / Reportes'],
   auditoria: ['Auditoría', 'Sistema / Auditoría'],
   usuarios: ['Usuarios', 'Sistema / Usuarios'],
 };
@@ -201,6 +202,7 @@ function loadPage(page) {
     case 'bodegas': loadBodegas(); break;
     case 'productos': loadProductos(); break;
     case 'movimientos': loadMovimientos(); break;
+    case 'reportes': initReportes(); break;
     case 'auditoria': loadAuditoria(); break;
     case 'usuarios': loadUsuarios(); break;
   }
@@ -541,45 +543,106 @@ document.getElementById('btn-stock-bajo')?.addEventListener('click', async () =>
   }
 });
 
-document.getElementById('btn-nuevo-producto')?.addEventListener('click', () => {
+document.getElementById('btn-nuevo-producto')?.addEventListener('click', async () => {
   document.getElementById('form-producto').reset();
   document.getElementById('producto-id').value = '';
   document.getElementById('modal-producto-title').textContent = 'Nuevo Producto';
   document.getElementById('producto-error').classList.add('hidden');
+  document.getElementById('producto-stock').disabled = false;
+  document.getElementById('label-producto-stock').textContent = 'Stock inicial *';
+  document.getElementById('label-producto-bodega').textContent = 'Bodega del inventario *';
+  document.getElementById('hint-producto-bodega').textContent = 'Si el stock es mayor a 0, se registra un movimiento de entrada en esa bodega.';
+  document.getElementById('grupo-producto-bodega').classList.remove('hidden');
+  await fillProductoBodegas();
   openModal('modal-producto');
 });
 
-function editProducto(id) {
+async function fillProductoBodegas(selectedId) {
+  const select = document.getElementById('producto-bodega');
+  if (!select) return;
+  try {
+    const bodegas = await apiFetch('/api/bodegas') || [];
+    select.innerHTML = '<option value="">Selecciona una bodega</option>' + bodegas.map(b =>
+      `<option value="${b.id}" ${String(b.id) === String(selectedId) ? 'selected' : ''}>${escapeHtml(b.nombre)}</option>`
+    ).join('');
+  } catch {
+    select.innerHTML = '<option value="">No se pudieron cargar las bodegas</option>';
+  }
+}
+
+async function cargarStockBodegaProducto() {
+  const productoId = document.getElementById('producto-id').value;
+  const bodegaId = document.getElementById('producto-bodega').value;
+  const stockInput = document.getElementById('producto-stock');
+  if (!productoId || !bodegaId) return;
+  try {
+    const data = await apiFetch(`/api/productos/${productoId}/inventario/${bodegaId}`);
+    stockInput.value = data?.cantidad ?? 0;
+  } catch {
+    stockInput.value = 0;
+  }
+}
+
+document.getElementById('producto-bodega')?.addEventListener('change', () => {
+  if (document.getElementById('producto-id').value) {
+    cargarStockBodegaProducto();
+  }
+});
+
+async function editProducto(id) {
   const p = productosData.find(x => x.id === id);
   if (!p) return;
   document.getElementById('producto-id').value = p.id;
   document.getElementById('producto-nombre').value = p.nombre;
   document.getElementById('producto-categoria').value = p.categoria;
-  document.getElementById('producto-stock').value = p.stock;
   document.getElementById('producto-precio').value = p.precio;
+  document.getElementById('producto-stock').disabled = false;
+  document.getElementById('label-producto-stock').textContent = 'Stock en la bodega *';
+  document.getElementById('label-producto-bodega').textContent = 'Bodega a ajustar *';
+  document.getElementById('hint-producto-bodega').textContent = 'El valor es el stock de esa bodega. Si lo cambias, se genera un movimiento de entrada o salida para conservar la trazabilidad.';
+  document.getElementById('grupo-producto-bodega').classList.remove('hidden');
   document.getElementById('modal-producto-title').textContent = 'Editar Producto';
   document.getElementById('producto-error').classList.add('hidden');
+  await fillProductoBodegas();
+  const select = document.getElementById('producto-bodega');
+  if (select.options.length > 1) {
+    select.selectedIndex = 1;
+    await cargarStockBodegaProducto();
+  } else {
+    document.getElementById('producto-stock').value = p.stock ?? 0;
+  }
   openModal('modal-producto');
 }
 
 document.getElementById('form-producto')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const id = document.getElementById('producto-id').value;
+  const stockVal = parseInt(document.getElementById('producto-stock').value);
+  const bodegaIdVal = document.getElementById('producto-bodega')?.value;
   const body = {
     nombre: document.getElementById('producto-nombre').value.trim(),
     categoria: document.getElementById('producto-categoria').value.trim(),
-    stock: parseInt(document.getElementById('producto-stock').value),
+    stock: stockVal,
     precio: parseFloat(document.getElementById('producto-precio').value),
+    bodegaId: bodegaIdVal ? parseInt(bodegaIdVal) : null,
   };
   if (!body.nombre || !body.categoria || isNaN(body.stock) || isNaN(body.precio)) {
     showModalError('producto-error', 'Completa todos los campos obligatorios.');
+    return;
+  }
+  if (body.stock > 0 && !body.bodegaId) {
+    showModalError('producto-error', 'Selecciona la bodega para el inventario.');
+    return;
+  }
+  if (id && body.stock >= 0 && !body.bodegaId) {
+    showModalError('producto-error', 'Selecciona la bodega cuyo stock quieres ajustar.');
     return;
   }
   setModalLoading('btn-save-producto', true);
   try {
     if (id) {
       await apiFetch(`/api/productos/${id}`, { method: 'PUT', body: JSON.stringify(body) });
-      showToast('Producto actualizado correctamente', 'success');
+      showToast('Producto actualizado. Si cambió el stock, se registró un movimiento.', 'success');
     } else {
       await apiFetch('/api/productos', { method: 'POST', body: JSON.stringify(body) });
       showToast('Producto creado correctamente', 'success');
@@ -752,6 +815,111 @@ document.getElementById('form-movimiento')?.addEventListener('submit', async (e)
     setModalLoading('btn-save-movimiento', false);
   }
 });
+
+/* ─────────────────────────────────────────────────────
+   REPORTES
+   ───────────────────────────────────────────────────── */
+function toIsoLocal(value) {
+  if (!value) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString();
+}
+
+async function initReportes() {
+  const select = document.getElementById('reporte-bodega');
+  try {
+    const bodegas = await apiFetch('/api/bodegas') || [];
+    const current = select.value;
+    select.innerHTML = '<option value="">Todas las bodegas</option>' + bodegas.map(b =>
+      `<option value="${b.id}" data-nombre="${escapeHtml(b.nombre)}">${escapeHtml(b.nombre)}</option>`
+    ).join('');
+    if (current) select.value = current;
+  } catch { /* se puede generar sin el combo de bodegas */ }
+}
+
+document.getElementById('btn-generar-reporte')?.addEventListener('click', generarReporte);
+
+async function generarReporte() {
+  const tipo = document.getElementById('reporte-tipo').value;
+  const bodegaSelect = document.getElementById('reporte-bodega');
+  const bodegaId = bodegaSelect.value;
+  const bodegaNombre = bodegaSelect.selectedOptions[0]?.dataset?.nombre || bodegaSelect.selectedOptions[0]?.textContent;
+  const tipoMov = document.getElementById('reporte-tipo-movimiento').value;
+  const producto = document.getElementById('reporte-producto').value.trim();
+  const entidad = document.getElementById('reporte-entidad').value.trim();
+  const fechaInicio = toIsoLocal(document.getElementById('reporte-fecha-inicio').value);
+  const fechaFin = toIsoLocal(document.getElementById('reporte-fecha-fin').value);
+  const tbody = document.getElementById('tbody-reportes');
+  const thead = document.getElementById('thead-reportes');
+  tbody.innerHTML = `<tr class="loading-row"><td colspan="8"><div class="table-loading">Generando reporte...</div></td></tr>`;
+  try {
+    if (tipo === 'inventario') {
+      const qs = bodegaId ? `?bodegaId=${encodeURIComponent(bodegaId)}` : '';
+      const data = await apiFetch(`/api/reportes/inventario${qs}`) || [];
+      thead.innerHTML = `<tr><th>Bodega</th><th>Producto</th><th>Categoría</th><th>Cantidad</th></tr>`;
+      if (!data.length) {
+        tbody.innerHTML = `<tr><td colspan="4"><div class="table-loading">Sin registros de inventario</div></td></tr>`;
+        return;
+      }
+      tbody.innerHTML = data.map(r => `
+        <tr>
+          <td>${escapeHtml(r.bodegaNombre)}</td>
+          <td>${escapeHtml(r.productoNombre)}</td>
+          <td>${escapeHtml(r.categoria)}</td>
+          <td class="${r.cantidad < 10 ? 'stock-low' : 'stock-ok'}">${r.cantidad}</td>
+        </tr>`).join('');
+    } else if (tipo === 'movimientos') {
+      const params = new URLSearchParams();
+      if (bodegaId && bodegaNombre && bodegaNombre !== 'Todas las bodegas') params.set('bodega', bodegaNombre);
+      if (producto) params.set('producto', producto);
+      if (tipoMov) params.set('tipoMovimiento', tipoMov);
+      if (fechaInicio) params.set('fechaInicio', fechaInicio);
+      if (fechaFin) params.set('fechaFin', fechaFin);
+      const q = params.toString();
+      const data = await apiFetch(`/api/reportes/movimientos${q ? '?' + q : ''}`) || [];
+      thead.innerHTML = `<tr><th>ID</th><th>Fecha</th><th>Tipo</th><th>Usuario</th><th>Origen</th><th>Destino</th></tr>`;
+      if (!data.length) {
+        tbody.innerHTML = `<tr><td colspan="6"><div class="table-loading">Sin movimientos para los filtros</div></td></tr>`;
+        return;
+      }
+      tbody.innerHTML = data.map(m => `
+        <tr>
+          <td>#${m.id}</td>
+          <td>${formatDate(m.fecha)}</td>
+          <td>${escapeHtml(m.tipoMovimiento)}</td>
+          <td>${escapeHtml(m.usuario?.username)}</td>
+          <td>${escapeHtml(m.bodegaOrigen?.nombre)}</td>
+          <td>${escapeHtml(m.bodegaDestino?.nombre)}</td>
+        </tr>`).join('');
+    } else {
+      const params = new URLSearchParams();
+      if (entidad) params.set('entidadAfectada', entidad);
+      if (fechaInicio) params.set('fechaInicio', fechaInicio);
+      if (fechaFin) params.set('fechaFin', fechaFin);
+      const q = params.toString();
+      const data = await apiFetch(`/api/reportes/auditoria${q ? '?' + q : ''}`) || [];
+      thead.innerHTML = `<tr><th>ID</th><th>Operación</th><th>Fecha</th><th>Usuario</th><th>Entidad</th><th>ID Entidad</th></tr>`;
+      if (!data.length) {
+        tbody.innerHTML = `<tr><td colspan="6"><div class="table-loading">Sin registros de auditoría para los filtros</div></td></tr>`;
+        return;
+      }
+      tbody.innerHTML = data.map(a => `
+        <tr>
+          <td>#${a.id}</td>
+          <td>${escapeHtml(a.tipoOperacion)}</td>
+          <td>${formatDate(a.fechaHora)}</td>
+          <td>${escapeHtml(a.usuario)}</td>
+          <td>${escapeHtml(a.entidadAfectada)}</td>
+          <td>${a.entidadId || '—'}</td>
+        </tr>`).join('');
+    }
+    setApiStatus(true);
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="8"><div class="table-loading">${escapeHtml(err.message)}</div></td></tr>`;
+    setApiStatus(false);
+  }
+}
 
 /* ─────────────────────────────────────────────────────
    AUDITORÍA

@@ -7,7 +7,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class MovimientoService {
@@ -75,6 +77,8 @@ public class MovimientoService {
             throw new IllegalArgumentException("El movimiento debe contener detalles.");
         }
 
+        validarDetallesYStockDisponible(movimiento.getTipoMovimiento(), origen, movimiento.getDetalles());
+
         StringBuilder resumenDetalles = new StringBuilder();
 
         for (DetalleMovimiento detalle : movimiento.getDetalles()) {
@@ -85,6 +89,9 @@ public class MovimientoService {
             detalle.setProducto(producto);
             detalle.setMovimiento(movimiento);
             int cantidad = detalle.getCantidad();
+            if (cantidad <= 0) {
+                throw new IllegalArgumentException("La cantidad del detalle debe ser mayor a cero.");
+            }
 
             if (movimiento.getTipoMovimiento() == TipoMovimiento.ENTRADA) {
                 agregarInventario(destino, producto, cantidad);
@@ -101,7 +108,7 @@ public class MovimientoService {
         Movimiento guardado = movimientoRepository.save(movimiento);
 
         auditoriaService.registrarAuditoria(
-                TipoOperacion.INSERT, usuarioResponsable, "Movimiento", null,
+                TipoOperacion.INSERT, usuarioResponsable, "Movimiento", guardado.getId(), null,
                 "Tipo: " + guardado.getTipoMovimiento() + ", Detalles: " + resumenDetalles.toString().trim());
 
         return guardado;
@@ -127,7 +134,54 @@ public class MovimientoService {
         return movimientoRepository.findByBodegaOrigenIdOrBodegaDestinoId(bodegaId, bodegaId);
     }
 
+    @Transactional(readOnly = true)
+    public int obtenerStockEnBodega(Long productoId, Long bodegaId) {
+        return inventarioBodegaRepository.findByBodegaIdAndProductoId(bodegaId, productoId)
+                .map(InventarioBodega::getCantidad)
+                .orElse(0);
+    }
+
+    @Transactional
+    public void ajustarStockEnBodega(Long productoId, Long bodegaId, int cantidadObjetivo, String username) {
+        if (cantidadObjetivo < 0) {
+            throw new IllegalArgumentException("El stock no puede ser negativo.");
+        }
+        productoRepository.findById(productoId)
+                .orElseThrow(() -> new ResourceNotFoundException("Producto no encontrado con id: " + productoId));
+        bodegaRepository.findById(bodegaId)
+                .orElseThrow(() -> new ResourceNotFoundException("Bodega no encontrada con id: " + bodegaId));
+
+        int actual = obtenerStockEnBodega(productoId, bodegaId);
+        int delta = cantidadObjetivo - actual;
+        if (delta == 0) {
+            return;
+        }
+
+        Movimiento movimiento = new Movimiento();
+        Bodega bodegaRef = new Bodega();
+        bodegaRef.setId(bodegaId);
+        if (delta > 0) {
+            movimiento.setTipoMovimiento(TipoMovimiento.ENTRADA);
+            movimiento.setBodegaDestino(bodegaRef);
+        } else {
+            movimiento.setTipoMovimiento(TipoMovimiento.SALIDA);
+            movimiento.setBodegaOrigen(bodegaRef);
+        }
+
+        DetalleMovimiento detalle = new DetalleMovimiento();
+        Producto productoRef = new Producto();
+        productoRef.setId(productoId);
+        detalle.setProducto(productoRef);
+        detalle.setCantidad(Math.abs(delta));
+        movimiento.setDetalles(new java.util.ArrayList<>(java.util.List.of(detalle)));
+
+        registrarMovimiento(movimiento, username);
+    }
+
     private void validarBodegasPorTipo(TipoMovimiento tipo, Bodega origen, Bodega destino) {
+        if (tipo == null) {
+            throw new IllegalArgumentException("El tipo de movimiento es obligatorio.");
+        }
         if (tipo == TipoMovimiento.ENTRADA && destino == null) {
             throw new IllegalArgumentException("Una entrada requiere bodega destino.");
         }
@@ -136,6 +190,40 @@ public class MovimientoService {
         }
         if (tipo == TipoMovimiento.TRANSFERENCIA && (origen == null || destino == null)) {
             throw new IllegalArgumentException("Transferencia requiere origen y destino.");
+        }
+        if (tipo == TipoMovimiento.TRANSFERENCIA && origen.getId().equals(destino.getId())) {
+            throw new IllegalArgumentException("La bodega de origen y destino no pueden ser la misma.");
+        }
+    }
+
+    private void validarDetallesYStockDisponible(TipoMovimiento tipo, Bodega origen,
+            List<DetalleMovimiento> detalles) {
+        Map<Long, Integer> cantidadPorProducto = new HashMap<>();
+        for (DetalleMovimiento detalle : detalles) {
+            if (detalle.getProducto() == null || detalle.getProducto().getId() == null) {
+                throw new IllegalArgumentException("Cada detalle debe indicar el producto.");
+            }
+            if (detalle.getCantidad() == null || detalle.getCantidad() <= 0) {
+                throw new IllegalArgumentException("La cantidad de cada detalle debe ser mayor a cero.");
+            }
+            cantidadPorProducto.merge(detalle.getProducto().getId(), detalle.getCantidad(), Integer::sum);
+        }
+
+        if (tipo != TipoMovimiento.SALIDA && tipo != TipoMovimiento.TRANSFERENCIA) {
+            return;
+        }
+
+        for (Map.Entry<Long, Integer> entrada : cantidadPorProducto.entrySet()) {
+            Long productoId = entrada.getKey();
+            int cantidadSolicitada = entrada.getValue();
+            int disponible = obtenerStockEnBodega(productoId, origen.getId());
+            if (disponible < cantidadSolicitada) {
+                Producto producto = productoRepository.findById(productoId).orElse(null);
+                String nombre = producto != null ? producto.getNombre() : ("ID " + productoId);
+                throw new IllegalArgumentException("Stock insuficiente de " + nombre
+                        + " en la bodega origen. Disponible: " + disponible
+                        + ", solicitado: " + cantidadSolicitada);
+            }
         }
     }
 
@@ -161,7 +249,11 @@ public class MovimientoService {
             throw new IllegalArgumentException("Stock insuficiente de " + producto.getNombre()
                     + " en la bodega. Disponible: " + inv.getCantidad());
         }
-        inv.setCantidad(inv.getCantidad() - cantidad);
+        int nuevoStock = inv.getCantidad() - cantidad;
+        if (nuevoStock < 0) {
+            throw new IllegalArgumentException("La operación dejaría stock negativo de " + producto.getNombre() + ".");
+        }
+        inv.setCantidad(nuevoStock);
         inventarioBodegaRepository.save(inv);
     }
 }

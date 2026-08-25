@@ -68,8 +68,11 @@ CREATE TABLE IF NOT EXISTS auditoria (
     fecha_hora TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     usuario_responsable_id BIGINT NOT NULL,
     entidad_afectada VARCHAR(50) NOT NULL,
+    entidad_id BIGINT,
     valor_anterior TEXT,
     valor_nuevo TEXT,
     CONSTRAINT tipo_operacion_check CHECK (tipo_operacion IN ('INSERT', 'UPDATE', 'DELETE')),
     CONSTRAINT fk_auditoria_usuario FOREIGN KEY (usuario_responsable_id) REFERENCES usuario(id)
 );
+
+ALTER TABLE logitrack.auditoria ADD COLUMN IF NOT EXISTS entidad_id BIGINT;

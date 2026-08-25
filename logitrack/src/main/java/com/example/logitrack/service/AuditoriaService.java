@@ -1,5 +1,6 @@
 package com.example.logitrack.service;
 
+import com.example.logitrack.dto.AuditoriaDTO;
 import com.example.logitrack.exception.ResourceNotFoundException;
 import com.example.logitrack.model.Auditoria;
 import com.example.logitrack.model.TipoOperacion;
@@ -21,13 +22,15 @@ public class AuditoriaService {
     }
 
     @Transactional
-    public Auditoria registrarAuditoria(TipoOperacion tipoOperacion, Usuario usuarioResponsable, 
-                                        String entidadAfectada, String valorAnterior, String valorNuevo) {
+    public Auditoria registrarAuditoria(TipoOperacion tipoOperacion, Usuario usuarioResponsable,
+                                        String entidadAfectada, Long entidadId,
+                                        String valorAnterior, String valorNuevo) {
         Auditoria auditoria = Auditoria.builder()
                 .tipoOperacion(tipoOperacion)
                 .fechaHora(LocalDateTime.now())
                 .usuarioResponsable(usuarioResponsable)
                 .entidadAfectada(entidadAfectada)
+                .entidadId(entidadId)
                 .valorAnterior(valorAnterior)
                 .valorNuevo(valorNuevo)
                 .build();
@@ -35,29 +38,35 @@ public class AuditoriaService {
     }
 
     @Transactional(readOnly = true)
-    public List<Auditoria> obtenerTodas() {
-        return auditoriaRepository.findAll();
+    public List<AuditoriaDTO> obtenerTodas() {
+        return auditoriaRepository.findAllWithUsuario().stream().map(AuditoriaDTO::from).toList();
     }
 
     @Transactional(readOnly = true)
-    public Auditoria obtenerPorId(Long id) {
-        return auditoriaRepository.findById(id)
+    public AuditoriaDTO obtenerPorId(Long id) {
+        Auditoria auditoria = auditoriaRepository.findByIdWithUsuario(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Registro de auditoría no encontrado con id: " + id));
+        return AuditoriaDTO.from(auditoria);
     }
 
     @Transactional(readOnly = true)
-    public List<Auditoria> obtenerPorUsuario(String usuario) {
-        // Se busca a través de la relación de la entidad Usuario (su atributo username)
-        return auditoriaRepository.findByUsuarioResponsableUsernameIgnoreCase(usuario);
+    public List<AuditoriaDTO> obtenerPorUsuario(String usuario) {
+        return auditoriaRepository.findByUsuarioResponsableUsernameIgnoreCase(usuario.toLowerCase()).stream()
+                .map(AuditoriaDTO::from)
+                .toList();
     }
 
     @Transactional(readOnly = true)
-    public List<Auditoria> obtenerPorTipoOperacion(TipoOperacion tipoOperacion) {
-        return auditoriaRepository.findByTipoOperacion(tipoOperacion);
+    public List<AuditoriaDTO> obtenerPorTipoOperacion(TipoOperacion tipoOperacion) {
+        return auditoriaRepository.findByTipoOperacion(tipoOperacion).stream()
+                .map(AuditoriaDTO::from)
+                .toList();
     }
 
     @Transactional(readOnly = true)
-    public List<Auditoria> obtenerPorEntidad(String entidadAfectada) {
-        return auditoriaRepository.findByEntidadAfectadaIgnoreCase(entidadAfectada);
+    public List<AuditoriaDTO> obtenerPorEntidad(String entidadAfectada) {
+        return auditoriaRepository.findByEntidadAfectadaIgnoreCase(entidadAfectada.toLowerCase()).stream()
+                .map(AuditoriaDTO::from)
+                .toList();
     }
 }
