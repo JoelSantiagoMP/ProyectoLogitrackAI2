@@ -16,7 +16,7 @@ Sistema de gestión de bodegas, inventario, movimientos y auditoría para LogiTr
 | Módulo | Descripción |
 | --- | --- |
 | Autenticación | Login JWT (`POST /api/auth/login`) |
-| Usuarios | CRUD con roles `ADMIN` y `EMPLEADO` |
+| Usuarios | CRUD con roles `ADMIN`, `EMPLEADO` y `AGENTE` |
 | Bodegas | CRUD de almacenes y encargado |
 | Productos | CRUD; el stock **no** se guarda en `producto`, se calcula desde `inventario_bodega` |
 | Stock inicial | Al crear un producto con stock &gt; 0 se exige una bodega y se inserta en `inventario_bodega` |
@@ -89,8 +89,38 @@ chmod +x mvnw
 | --- | --- | --- |
 | `admin_logitrack` | ADMIN | `123456` (según comentario del script; el valor persistido está en BCrypt) |
 | `empleado_1` | EMPLEADO | `123456` (ídem) |
+| `agente_mcp` | AGENTE | `123456` (MCP y flujo n8n) |
 
 Tras el login, el frontend guarda el JWT en `sessionStorage` y lo envía en `Authorization: Bearer ...`.
+
+## LogiTrack IQ — Torre de control
+
+Extensión del reto IA2: KPIs, productos en riesgo, órdenes de compra, panel operativo, PDF y rol `AGENTE`.
+
+Documentación SDD: [`../docs/sdd/`](../docs/sdd/). Diagrama: [`../docs/diagrama-arquitectura.md`](../docs/diagrama-arquitectura.md).
+
+### Endpoints IQ (JWT requerido)
+
+| Método | Ruta | Rol |
+| --- | --- | --- |
+| GET | `/kpis`, `/api/kpis` | ADMIN, AGENTE |
+| GET | `/productos/riesgo`, `/api/productos/riesgo` | ADMIN, AGENTE |
+| GET | `/productos/{id}/stock`, `/api/productos/{id}/stock` | ADMIN, AGENTE |
+| GET | `/bodegas/criticas`, `/api/bodegas/criticas` | ADMIN, AGENTE |
+| GET | `/proveedores`, `/api/proveedores` | ADMIN, AGENTE |
+| GET/POST | `/ordenes`, `/api/ordenes` | ADMIN, AGENTE (POST crea `BORRADOR`) |
+| PATCH | `/ordenes/{id}/estado`, `/api/ordenes/{id}/estado` | **Solo ADMIN** |
+| POST/GET | `/ordenes/{id}/pdf` | ADMIN, AGENTE |
+| POST/GET | `/panel/resumen`, `/api/panel/resumen` | ADMIN, AGENTE |
+| POST | `/api/movimientos` | **Solo ADMIN** |
+
+### MCP y n8n
+
+- Servidor MCP: [`../mcp-server/`](../mcp-server/)
+- Skill: [`../skills/operacion-logitrack/SKILL.md`](../skills/operacion-logitrack/SKILL.md)
+- Flujo n8n: [`../n8n/resumen-diario-inventario.json`](../n8n/resumen-diario-inventario.json) (cron 06:00 `America/Bogota`)
+
+Casos de prueba IQ: `src/test/java/com/example/logitrack/iq/`.
 
 ## API principal
 

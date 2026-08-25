@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/bodegas")
+@RequestMapping({"/api/bodegas", "/bodegas"})
 public class BodegaController {
 
     private final BodegaService bodegaService;

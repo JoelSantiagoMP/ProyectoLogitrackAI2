@@ -46,11 +46,12 @@ public class SecurityConfig {
                                 "/api/ordenes", "/api/ordenes/**", "/ordenes", "/ordenes/**",
                                 "/api/panel/**", "/panel/**")
                         .hasAnyRole("ADMIN", "AGENTE")
-                        .requestMatchers(HttpMethod.GET, "/api/productos/riesgo", "/api/productos/*/stock",
-                                "/api/bodegas/criticas")
+                        .requestMatchers(HttpMethod.GET, "/api/productos/riesgo", "/productos/riesgo",
+                                "/api/productos/*/stock", "/productos/*/stock",
+                                "/api/bodegas/criticas", "/bodegas/criticas")
                         .hasAnyRole("ADMIN", "AGENTE")
-                        .requestMatchers("/api/bodegas/**", "/api/productos/**")
-                        .permitAll()
+                        .requestMatchers("/api/bodegas/**", "/api/productos/**", "/bodegas/**", "/productos/**")
+                        .authenticated()
                         .anyRequest().authenticated())
                 .exceptionHandling(ex -> ex
                         .accessDeniedHandler((request, response, accessDeniedException) -> {

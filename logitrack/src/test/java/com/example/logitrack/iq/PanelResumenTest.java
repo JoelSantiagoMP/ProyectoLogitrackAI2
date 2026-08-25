@@ -5,6 +5,8 @@ import com.example.logitrack.model.ResumenPanel;
 import com.example.logitrack.model.Rol;
 import com.example.logitrack.model.Usuario;
 import com.example.logitrack.repository.BodegaRepository;
+import com.example.logitrack.repository.InventarioBodegaRepository;
+import com.example.logitrack.repository.MovimientoRepository;
 import com.example.logitrack.repository.OrdenCompraRepository;
 import com.example.logitrack.repository.ProductoRepository;
 import com.example.logitrack.repository.ProveedorRepository;
@@ -62,6 +64,12 @@ class PanelResumenTest {
     private ProveedorRepository proveedorRepository;
 
     @Autowired
+    private MovimientoRepository movimientoRepository;
+
+    @Autowired
+    private InventarioBodegaRepository inventarioBodegaRepository;
+
+    @Autowired
     private PasswordEncoder passwordEncoder;
 
     private LocalDate hoyBogota;
@@ -71,6 +79,8 @@ class PanelResumenTest {
         mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext)
                 .apply(springSecurity())
                 .build();
+        movimientoRepository.deleteAll();
+        inventarioBodegaRepository.deleteAll();
         ordenCompraRepository.deleteAll();
         resumenPanelRepository.deleteAll();
         productoRepository.deleteAll();

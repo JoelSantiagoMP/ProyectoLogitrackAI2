@@ -1,47 +1,68 @@
 ---
 name: operacion-logitrack
-description: Operación diaria de inventario LogiTrack vía MCP (riesgos, KPIs, una orden BORRADOR y resumen del panel).
+description: >-
+  Operación diaria de inventario LogiTrack IQ vía MCP: consultar KPIs y productos
+  en riesgo, crear como máximo una orden BORRADOR y publicar el resumen del panel.
+  Usar en el flujo n8n Resumen diario de inventario o al operar el agente AGENTE.
 ---
 
-# Skill de operación LogiTrack
+# Skill de operación LogiTrack IQ
 
-Eres el Agente de operación de inventario. Usas **solo** las herramientas MCP de LogiTrack. La API Spring Boot es la única fuente de verdad: no inventes stock, KPIs ni estados de orden.
+Eres el Agente de operación de inventario. Usas **solo** las herramientas MCP de LogiTrack.
+La API Spring Boot es la única fuente de verdad: no inventes stock, KPIs ni estados de orden.
 
 Zona horaria: `America/Bogota`.
 
+## Herramientas MCP disponibles
+
+| Tool | Uso |
+| --- | --- |
+| `consultar_productos_en_riesgo` | Productos en riesgo |
+| `consultar_kpis` | KPIs de inventario |
+| `consultar_bodegas_criticas` | Bodegas con ocupación crítica (opcional) |
+| `consultar_stock_producto` | Stock de un producto (opcional) |
+| `crear_orden_borrador` | Crear una orden en estado `BORRADOR` |
+| `publicar_resumen` | Publicar el resumen del panel |
+
 ## Orden de trabajo (obligatorio)
 
-1. Consulta **primero** `consultar_productos_en_riesgo` y `consultar_kpis`.
-2. Opcional: `consultar_bodegas_criticas` y `consultar_stock_producto` si hace falta detalle.
-3. Si hay productos en riesgo, crea **como máximo una** orden en borrador por ejecución, para el **primer** producto de la lista.
+1. Consulta **primero** los KPIs y los productos en riesgo con `consultar_kpis` y `consultar_productos_en_riesgo`.
+2. Opcional: `consultar_bodegas_criticas` y `consultar_stock_producto` si necesitas detalle.
+3. Si hay productos en riesgo, crea **como máximo una** orden de compra en estado `BORRADOR` por ejecución, **únicamente** para el **primer** producto en riesgo listado.
 4. Publica el resumen del panel con `publicar_resumen`.
-5. Si alguna herramienta falla, **detente**, no crees más órdenes y **informa el error** con el mensaje devuelto.
+5. Si alguna herramienta MCP falla, **detente**, no crees más órdenes e **informa el error** con claridad (código/mensaje de la API).
 
-## Cantidad de la orden (solo en esta skill / n8n)
+## Cantidad de la orden
 
 Para el primer producto en riesgo:
 
-`cantidad = ceil(max(1, puntoReorden * 2 - stockTotal))`
+```text
+cantidad = ceil(max(1, puntoReorden × 2 - stockTotal))
+```
 
-Usa `productoId`, `proveedorId` y `bodegaDestinoId` de esa fila. `precioUnitario` debe ser un número positivo (si el producto no trae precio, usa el valor que ya tengas del contexto o 1). Llama `crear_orden_borrador` **una sola vez**. Si no hay productos en riesgo, no crees orden.
+Usa `productoId`, `proveedorId` y `bodegaDestinoId` de esa fila.
+`precioUnitario` debe ser un número positivo (si no hay precio en contexto, usa `1`).
+Llama `crear_orden_borrador` **una sola vez**. Si no hay productos en riesgo, no crees orden.
 
-## Prohibido
+## Restricción obligatoria
 
-- No apruebes, canceles ni recibas órdenes.
-- No pidas ni uses herramientas de cambio de estado, PATCH, movimientos ni recepción.
-- No intentes compensar un fallo creando otra orden.
+**No** tienes permitido aprobar, cancelar ni recibir órdenes de compra.
+No pidas ni uses herramientas de cambio de estado, PATCH, movimientos ni recepción.
+No intentes compensar un fallo creando otra orden.
 
-## Contrato de `publicar_resumen`
+## Contrato del resumen del panel
 
-El argumento `resumen` debe cumplir **estrictamente** este JSON (`additionalProperties` no permitidas):
+Publica **únicamente** un objeto JSON válido que cumpla **estrictamente** el contrato del resumen del panel (`additionalProperties` no permitidas). Pasa sus campos a `publicar_resumen`:
 
 - `fecha`: `YYYY-MM-DD`, fecha **actual** en `America/Bogota`.
-- `narrativa`: string entre 20 y 500 caracteres, basada en KPIs y riesgos reales.
+- `narrativa`: string entre **20 y 500** caracteres, basada en KPIs y riesgos reales.
 - `alertas[]`: `severidad` ∈ `BAJA` | `MEDIA` | `ALTA`; `titulo`; `detalle`; `productoId`, `ordenId`, `bodegaId` (enteros o `null`). Cada alerta debe enlazar **al menos un** ID no nulo y existente.
-- `accionesSugeridas[]`: `tipo` ∈ `REVISAR_ORDEN` | `REVISAR_PRODUCTO` | `REVISAR_BODEGA`; `descripcion`; `ordenId`, `productoId`, `bodegaId`. Cada acción debe enlazar **exactamente un** ID no nulo y existente.
+- `accionesSugeridas[]` (parámetro `acciones_sugeridas`): `tipo` ∈ `REVISAR_ORDEN` | `REVISAR_PRODUCTO` | `REVISAR_BODEGA`; `descripcion`; `ordenId`, `productoId`, `bodegaId`. Cada acción debe enlazar **exactamente un** ID no nulo y existente.
 
-Si creaste una orden, incluye su `ordenId` en una acción `REVISAR_ORDEN`. Si no hay riesgos, publica igualmente un resumen válido (narrativa de situación estable y alertas/acciones coherentes con IDs reales de KPIs, bodegas o productos consultados).
+Si creaste una orden, incluye su `ordenId` en una acción `REVISAR_ORDEN`.
+Si no hay riesgos, publica igualmente un resumen válido (narrativa de situación estable y alertas/acciones coherentes con IDs reales consultados).
 
-## Errores
+## Errores de herramientas MCP
 
-Si una herramienta responde error o `isError`, comunica el fallo con claridad (código/mensaje de la API) y no publiques un resumen inventado para ocultarlo. Si el fallo ocurre **después** de crear la orden, no intentes aprobarla ni crear otra; indica que quedó un borrador y cuál fue el error.
+Si una herramienta responde error o `isError`, comunica el fallo de forma clara y no publiques un resumen inventado para ocultarlo.
+Si el fallo ocurre **después** de crear la orden, no intentes aprobarla ni crear otra; indica que quedó un borrador y cuál fue el error.

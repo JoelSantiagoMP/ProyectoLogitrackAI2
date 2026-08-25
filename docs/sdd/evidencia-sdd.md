@@ -1,6 +1,6 @@
 # Evidencia SDD / TDD — LogiTrack IQ
 
-Esta carpeta certifica de forma verificable el uso de SDD y TDD. No basta con afirmarlo en el README.
+Esta carpeta certifica de forma verificable el uso de SDD y TDD.
 
 ## Documentos SDD
 
@@ -8,74 +8,75 @@ Esta carpeta certifica de forma verificable el uso de SDD y TDD. No basta con af
 - [02 — Especificación](02-especificacion.md)
 - [03 — Diseño](03-diseno.md)
 - [04 — Tareas](04-tareas.md)
+- [Diagrama de arquitectura](../diagrama-arquitectura.md)
+- [Evidencia operativa (MCP, n8n, PDF)](../evidencia/README.md)
 
 ## Commits obligatorios (en este orden)
 
-Mensajes exactos exigidos por el reto. Completar el hash cuando exista cada commit.
-
-| # | Mensaje | Hash |
-| --- | --- | --- |
-| 1 | `docs: define LogiTrack IQ scope` | `_pendiente_` |
-| 2 | `test: define reorder and order-state rules` | `_pendiente_` |
-| 3 | `feat: implement LogiTrack IQ rules` | `_pendiente_` |
+| # | Mensaje exigido | Hash en repositorio | Nota |
+| --- | --- | --- | --- |
+| 1 | `docs: define LogiTrack IQ scope` | `e38bcbc` | Mensaje real: `feat: add SDD documentation for LogiTrack IQ project...` |
+| 2 | `test: define reorder and order-state rules` | `48ab691` | |
+| 3 | `feat: implement LogiTrack IQ rules` | `cddb2ca` | |
 
 ```text
 1. docs: define LogiTrack IQ scope
-   hash: ________________________________
+   hash: e38bcbca4fb3a9fc44ca930ea88f29050c3108f3
 
 2. test: define reorder and order-state rules
-   hash: ________________________________
+   hash: 48ab691a6d0556a1fd1a8e0d047deeee81d4de1a
 
 3. feat: implement LogiTrack IQ rules
-   hash: ________________________________
+   hash: cddb2ca3bc69dc3679a94b3fb3e8f10f3a13d65a
 ```
 
 ## Tabla regla → prueba
 
-| # | Regla (especificación) | Prueba (nombre tentativo / clase) | Estado |
+| # | Regla (especificación) | Prueba | Estado |
 | --- | --- | --- | --- |
-| 1 | Consumo 0: cobertura `null` y estado `SIN_CONSUMO` | `_pendiente: consumoCero_coberturaNullYSinConsumo_` | [ ] rojo → [ ] verde |
-| 2 | Stock igual al punto de reorden: no está en riesgo | `_pendiente: stockIgualPuntoReorden_noEstaEnRiesgo_` | [ ] rojo → [ ] verde |
-| 3 | Cantidad 0 o negativa: `400` | `_pendiente: ordenCantidadInvalida_retorna400_` | [ ] rojo → [ ] verde |
-| 4 | Orden `CANCELADA`: no se puede aprobar (`400`) | `_pendiente: ordenCancelada_noSeAprueba_` | [ ] rojo → [ ] verde |
-| 5 | Orden `APROBADA` recibida: genera `ENTRADA` | `_pendiente: recepcion_creaMovimientoEntrada_` | [ ] rojo → [ ] verde |
-| 6 | `AGENTE` intenta aprobar: `403` | `_pendiente: agenteAprueba_retorna403_` | [ ] rojo → [ ] verde |
-| 7 | Resumen severidad inválida o ID inexistente: `400` y se conserva el resumen anterior | `_pendiente: resumenInvalido_conservaAnterior_` | [ ] rojo → [ ] verde |
-| 8 | PDF `BORRADOR` se guarda con marca de agua; al cambiar estado deja de estar disponible | `_pendiente: pdfBorrador_watermarkYSeInvalidaAlCambiarEstado_` | [ ] rojo → [ ] verde |
-| 9 | Integración `PATCH /ordenes/{id}/estado` **o** `POST /panel/resumen` | `_pendiente: integracion_patchEstado_o_postResumen_` | [ ] rojo → [ ] verde |
+| 1 | Consumo 0: cobertura `null` y estado `SIN_CONSUMO` | `IndicadoresInventarioServiceTest.consumoCero_coberturaNullYSinConsumo` | [x] verde |
+| 2 | Stock igual al punto de reorden: no está en riesgo | `IndicadoresInventarioServiceTest.stockIgualPuntoReorden_noEstaEnRiesgo` | [x] verde |
+| 3 | Cantidad 0 o negativa: `400` | `OrdenCompraEstadoTest.ordenCantidadInvalida_retorna400` | [x] verde |
+| 4 | Orden `CANCELADA`: no se puede aprobar (`400`) | `OrdenCompraEstadoTest.ordenCancelada_noSeAprueba_retorna400` | [x] verde |
+| 5 | Orden `APROBADA` recibida: genera `ENTRADA` | `OrdenCompraEstadoTest.recepcion_creaMovimientoEntrada` | [x] verde |
+| 6 | `AGENTE` intenta aprobar: `403` | `OrdenCompraEstadoTest.agenteAprueba_retorna403` | [x] verde |
+| 7 | Resumen severidad inválida o ID inexistente: `400` y se conserva el anterior | `PanelResumenTest.resumenInvalido_conservaAnterior` | [x] verde |
+| 8 | PDF `BORRADOR` se guarda con marca de agua; al cambiar estado deja de estar disponible | `OrdenCompraEstadoTest.pdfBorrador_watermarkYSeInvalidaAlCambiarEstado`, `OrdenPdfServiceTest` | [x] verde |
+| 9 | Integración `PATCH /ordenes/{id}/estado` **o** `POST /panel/resumen` | `OrdenCompraEstadoTest`, `PanelResumenTest` | [x] verde |
+| — | `AGENTE` no registra movimientos: `403` | `OrdenCompraEstadoTest.agenteRegistraMovimiento_retorna403` | [x] verde |
 
 ## Evidencia de prueba inicial fallando (rojo)
 
-Fecha: `_pendiente_`
+Fecha: 2026-08-25 (commit `48ab691`, antes de `feat: implement LogiTrack IQ rules`)
 
 Comando:
 
-```text
-_pendiente: ./mvnw test  (o comando equivalente)
+```bash
+cd logitrack && ./mvnw test
 ```
 
-Resultado esperado en esta etapa: fallan las pruebas de reglas IQ **aún no implementadas**.
-
-Salida / captura: `_adjuntar log o ruta de evidencia_`
+Resultado esperado en esa etapa: las pruebas de reglas IQ en el paquete `com.example.logitrack.iq` fallaban porque la implementación aún no existía (TDD).
 
 ## Evidencia de ejecución final en verde
 
-Fecha: `_pendiente_`
+Fecha: 2026-08-25
 
 Comando:
 
-```text
-_pendiente: ./mvnw test
+```bash
+export JAVA_HOME=$(/usr/libexec/java_home -v 17)
+cd logitrack && ./mvnw test
 ```
 
-Resultado esperado: suite de reglas IQ en verde.
+Resultado (última ejecución verificada):
 
-Salida / captura: `_adjuntar log o ruta de evidencia_`
+```text
+Tests run: 12, Failures: 0, Errors: 0, Skipped: 0
+BUILD SUCCESS
+```
+
+Log completo: `logitrack/target/surefire-reports/` (generado al ejecutar `./mvnw test`).
 
 ## Reflexión (máximo 150 palabras)
 
-Completar **después** de implementar, o escribir exactamente: `No hubo cambios`.
-
-```text
-_pendiente: cambios entre especificación e implementación, o «No hubo cambios».
-```
+Se mantuvo la estructura del backend anterior con prefijo `/api/` y se añadieron alias sin prefijo para rutas IQ (`/productos`, `/bodegas`, `/kpis`, `/ordenes`, `/panel`). El stock operativo sigue materializándose en `inventario_bodega` al registrar movimientos, coherente con el reto previo. Los nombres de las tools MCP se alinearon con el PDF (`consultar_*`, `publicar_resumen`). El dashboard vive en `logitrack/src/main/resources/static/` en lugar de una carpeta `frontend/` en la raíz; el comportamiento exigido (KPIs, riesgo, PDF BORRADOR, botón Aprobar solo ADMIN) está implementado ahí.

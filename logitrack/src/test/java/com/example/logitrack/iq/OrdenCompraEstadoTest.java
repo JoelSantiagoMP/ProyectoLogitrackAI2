@@ -3,13 +3,17 @@ package com.example.logitrack.iq;
 import com.example.logitrack.dto.LoginRequest;
 import com.example.logitrack.model.Bodega;
 import com.example.logitrack.model.EstadoOrdenCompra;
+import com.example.logitrack.model.Movimiento;
 import com.example.logitrack.model.OrdenCompra;
 import com.example.logitrack.model.Producto;
 import com.example.logitrack.model.Proveedor;
 import com.example.logitrack.model.Rol;
+import com.example.logitrack.model.TipoMovimiento;
 import com.example.logitrack.model.Usuario;
 import com.example.logitrack.repository.AuditoriaRepository;
 import com.example.logitrack.repository.BodegaRepository;
+import com.example.logitrack.repository.InventarioBodegaRepository;
+import com.example.logitrack.repository.MovimientoRepository;
 import com.example.logitrack.repository.OrdenCompraRepository;
 import com.example.logitrack.repository.ProductoRepository;
 import com.example.logitrack.repository.ProveedorRepository;
@@ -27,6 +31,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -69,16 +74,27 @@ class OrdenCompraEstadoTest {
     private AuditoriaRepository auditoriaRepository;
 
     @Autowired
+    private MovimientoRepository movimientoRepository;
+
+    @Autowired
+    private InventarioBodegaRepository inventarioBodegaRepository;
+
+    @Autowired
     private PasswordEncoder passwordEncoder;
 
     private Long ordenCanceladaId;
     private Long ordenBorradorId;
+    private Long productoId;
+    private Long proveedorId;
+    private Long bodegaId;
 
     @BeforeEach
     void prepararDatos() {
         mockMvc = MockMvcBuilders.webAppContextSetup(webApplicationContext)
                 .apply(springSecurity())
                 .build();
+        movimientoRepository.deleteAll();
+        inventarioBodegaRepository.deleteAll();
         ordenCompraRepository.deleteAll();
         resumenPanelRepository.deleteAll();
         auditoriaRepository.deleteAll();
@@ -110,6 +126,8 @@ class OrdenCompraEstadoTest {
         producto.setPrecio(1000.0);
         producto.setProveedorPrincipal(proveedor);
         producto = productoRepository.save(producto);
+        productoId = producto.getId();
+        proveedorId = proveedor.getId();
 
         Bodega bodega = bodegaRepository.save(Bodega.builder()
                 .nombre("Bodega IQ")
@@ -117,6 +135,7 @@ class OrdenCompraEstadoTest {
                 .capacidad(500)
                 .encargado(admin)
                 .build());
+        bodegaId = bodega.getId();
 
         OrdenCompra orden = OrdenCompra.builder()
                 .producto(producto)
@@ -152,6 +171,79 @@ class OrdenCompraEstadoTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"estado\":\"APROBADA\"}"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void ordenCantidadInvalida_retorna400() throws Exception {
+        String token = tokenDe("agente-iq", "agente123");
+
+        mockMvc.perform(post("/api/ordenes")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"productoId":%d,"proveedorId":%d,"bodegaDestinoId":%d,"precioUnitario":1000.0,"cantidad":0}
+                                """.formatted(productoId, proveedorId, bodegaId)))
+                .andExpect(status().isBadRequest());
+
+        mockMvc.perform(post("/api/ordenes")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"productoId":%d,"proveedorId":%d,"bodegaDestinoId":%d,"precioUnitario":1000.0,"cantidad":-3}
+                                """.formatted(productoId, proveedorId, bodegaId)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void recepcion_creaMovimientoEntrada() throws Exception {
+        String token = tokenDe("admin-iq", "admin123");
+        Usuario admin = usuarioRepository.findByUsername("admin-iq").orElseThrow();
+
+        OrdenCompra aprobada = ordenCompraRepository.save(OrdenCompra.builder()
+                .producto(productoRepository.findById(productoId).orElseThrow())
+                .proveedor(proveedorRepository.findById(proveedorId).orElseThrow())
+                .bodegaDestino(bodegaRepository.findById(bodegaId).orElseThrow())
+                .cantidad(12)
+                .precioUnitario(500.0)
+                .total(6000.0)
+                .estado(EstadoOrdenCompra.APROBADA)
+                .creadoPor(admin)
+                .build());
+
+        long entradasAntes = movimientoRepository.findByTipoMovimiento(TipoMovimiento.ENTRADA).size();
+
+        mockMvc.perform(patch("/api/ordenes/{id}/estado", aprobada.getId())
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"estado\":\"RECIBIDA\"}"))
+                .andExpect(status().isOk());
+
+        assertEquals(EstadoOrdenCompra.RECIBIDA,
+                ordenCompraRepository.findById(aprobada.getId()).orElseThrow().getEstado());
+
+        long entradasDespues = movimientoRepository.findByTipoMovimiento(TipoMovimiento.ENTRADA).size();
+        assertEquals(entradasAntes + 1, entradasDespues);
+
+        Movimiento entrada = movimientoRepository.findByTipoMovimiento(TipoMovimiento.ENTRADA).stream()
+                .filter(m -> m.getBodegaDestino() != null && bodegaId.equals(m.getBodegaDestino().getId()))
+                .filter(m -> m.getDetalles() != null && m.getDetalles().stream()
+                        .anyMatch(d -> productoId.equals(d.getProducto().getId()) && d.getCantidad() == 12))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("No se registró la ENTRADA de recepción"));
+        assertEquals(TipoMovimiento.ENTRADA, entrada.getTipoMovimiento());
+    }
+
+    @Test
+    void agenteRegistraMovimiento_retorna403() throws Exception {
+        String token = tokenDe("agente-iq", "agente123");
+
+        mockMvc.perform(post("/api/movimientos")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"tipoMovimiento":"ENTRADA","bodegaDestinoId":%d,"detalles":[{"productoId":%d,"cantidad":1}]}
+                                """.formatted(bodegaId, productoId)))
+                .andExpect(status().isForbidden());
     }
 
     @Test
