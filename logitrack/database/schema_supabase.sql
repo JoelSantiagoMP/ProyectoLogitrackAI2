@@ -25,9 +25,8 @@ CREATE TABLE IF NOT EXISTS bodega (
     nombre VARCHAR(100) NOT NULL,
     ubicacion VARCHAR(150),
     capacidad INTEGER NOT NULL,
-    encargado_id BIGINT NOT NULL,
-    CONSTRAINT capacidad_check CHECK (capacidad >= 0),
-    CONSTRAINT fk_bodega_encargado FOREIGN KEY (encargado_id) REFERENCES usuario(id)
+    encargado VARCHAR(150) NOT NULL,
+    CONSTRAINT capacidad_check CHECK (capacidad > 0)
 );
 
 CREATE TABLE IF NOT EXISTS proveedor (
@@ -150,6 +149,28 @@ END $$;
 ALTER TABLE logitrack.orden_compra ADD COLUMN IF NOT EXISTS pdf BYTEA;
 ALTER TABLE logitrack.orden_compra ADD COLUMN IF NOT EXISTS fecha_generacion_pdf TIMESTAMP;
 
+-- Migrar encargado_id (FK usuario) → encargado (texto libre)
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'logitrack' AND table_name = 'bodega' AND column_name = 'encargado_id'
+    ) THEN
+        ALTER TABLE logitrack.bodega ADD COLUMN IF NOT EXISTS encargado VARCHAR(150);
+        UPDATE logitrack.bodega b
+        SET encargado = u.username
+        FROM logitrack.usuario u
+        WHERE b.encargado_id = u.id
+          AND (b.encargado IS NULL OR TRIM(b.encargado) = '');
+        UPDATE logitrack.bodega
+        SET encargado = 'Sin asignar'
+        WHERE encargado IS NULL OR TRIM(encargado) = '';
+        ALTER TABLE logitrack.bodega DROP CONSTRAINT IF EXISTS fk_bodega_encargado;
+        ALTER TABLE logitrack.bodega DROP COLUMN encargado_id;
+        ALTER TABLE logitrack.bodega ALTER COLUMN encargado SET NOT NULL;
+    END IF;
+END $$;
+
 -- -----------------------------------------------------------------------------
 -- Datos de demostración IQ
 -- Hash BCrypt de 123456 (mismo valor que data.sql histórico)
@@ -171,14 +192,12 @@ INSERT INTO proveedor (nombre, contacto, dias_entrega)
 SELECT 'Suministros Caribe Ltda', 'ventas@caribe.test', 7
 WHERE NOT EXISTS (SELECT 1 FROM proveedor WHERE nombre = 'Suministros Caribe Ltda');
 
-INSERT INTO bodega (nombre, ubicacion, capacidad, encargado_id)
-SELECT 'Bodega Principal Bucaramanga', 'Zona Industrial Norte', 5000,
-       (SELECT id FROM usuario WHERE username = 'admin_logitrack')
+INSERT INTO bodega (nombre, ubicacion, capacidad, encargado)
+SELECT 'Bodega Principal Bucaramanga', 'Zona Industrial Norte', 5000, 'Carlos Ramírez'
 WHERE NOT EXISTS (SELECT 1 FROM bodega WHERE nombre = 'Bodega Principal Bucaramanga');
 
-INSERT INTO bodega (nombre, ubicacion, capacidad, encargado_id)
-SELECT 'Bodega Secundaria Sur', 'Autopista Sur Km 3', 80,
-       (SELECT id FROM usuario WHERE username = 'admin_logitrack')
+INSERT INTO bodega (nombre, ubicacion, capacidad, encargado)
+SELECT 'Bodega Secundaria Sur', 'Autopista Sur Km 3', 80, 'Sandra López'
 WHERE NOT EXISTS (SELECT 1 FROM bodega WHERE nombre = 'Bodega Secundaria Sur');
 
 INSERT INTO producto (nombre, categoria, precio, proveedor_principal_id)

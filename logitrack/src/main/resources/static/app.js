@@ -38,9 +38,16 @@ function clearSession() {
   sessionStorage.removeItem('logitrack_rol');
 }
 
-function isAdmin() {
-  return currentRole === 'ADMIN';
+function getCurrentRole() {
+  return currentRole || sessionStorage.getItem('logitrack_rol');
 }
+
+function isAdmin() {
+  return getCurrentRole() === 'ADMIN';
+}
+
+const ADMIN_ONLY_PAGES = ['auditoria', 'usuarios'];
+const ADMIN_MODALS = ['modal-movimiento', 'modal-bodega', 'modal-producto', 'modal-usuario', 'modal-confirm'];
 
 function forceLogout() {
   clearSession();
@@ -163,6 +170,19 @@ function escapeHtml(str) {
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+function nombreEncargado(bodega) {
+  if (!bodega) return 'Sin asignar';
+  const enc = bodega.encargado;
+  if (enc == null || enc === '') return 'Sin asignar';
+  if (typeof enc === 'string') {
+    const texto = enc.trim();
+    return texto || 'Sin asignar';
+  }
+  const legacy = enc.username || enc.nombre || enc.name;
+  if (legacy && String(legacy).trim()) return String(legacy).trim();
+  return 'Sin asignar';
+}
+
 /* ─────────────────────────────────────────────────────
    TOAST
    ───────────────────────────────────────────────────── */
@@ -188,6 +208,10 @@ function showToast(message, type = 'default') {
    MODAL HELPERS
    ───────────────────────────────────────────────────── */
 function openModal(id) {
+  if (ADMIN_MODALS.includes(id) && !isAdmin()) {
+    showToast('No tienes permiso para esta acción.', 'error');
+    return;
+  }
   const el = document.getElementById(id);
   if (!el) return;
   el.classList.remove('hidden');
@@ -236,6 +260,10 @@ const pageTitles = {
 };
 
 function navigateTo(page) {
+  if (ADMIN_ONLY_PAGES.includes(page) && !isAdmin()) {
+    showToast('No tienes permiso para acceder a esta sección.', 'error');
+    page = 'dashboard';
+  }
   pages.forEach(p => {
     document.getElementById(`page-${p}`)?.classList.remove('active');
     document.getElementById(`nav-${p}`)?.classList.remove('active');
@@ -364,20 +392,37 @@ async function resolveCurrentRole() {
 }
 
 function applyRoleUi() {
+  currentRole = sessionStorage.getItem('logitrack_rol') || currentRole;
   const roleEl = document.getElementById('sidebar-role');
   if (roleEl) roleEl.textContent = currentRole || '—';
-  document.querySelectorAll('.admin-only').forEach((el) => {
-    el.classList.toggle('hidden', !isAdmin());
-  });
+
+  if (isAdmin()) return;
+
+  document.querySelectorAll('.admin-only').forEach((el) => el.remove());
+
+  ADMIN_MODALS.forEach((id) => closeModal(id));
+
+  const activeAdminPage = ADMIN_ONLY_PAGES.find(
+    (p) => document.getElementById(`page-${p}`)?.classList.contains('active')
+  );
+  if (activeAdminPage) {
+    pages.forEach((p) => {
+      document.getElementById(`page-${p}`)?.classList.remove('active');
+      document.getElementById(`nav-${p}`)?.classList.remove('active');
+    });
+    const dash = document.getElementById('page-dashboard');
+    const navDash = document.getElementById('nav-dashboard');
+    if (dash) dash.classList.add('active');
+    if (navDash) navDash.classList.add('active');
+    document.getElementById('page-title').textContent = pageTitles.dashboard[0];
+    document.getElementById('page-breadcrumb').textContent = pageTitles.dashboard[1];
+  }
 }
 
 document.getElementById('logout-btn')?.addEventListener('click', () => {
   clearSession();
-  document.getElementById('app')?.classList.add('hidden');
-  document.getElementById('login-screen')?.classList.remove('hidden');
-  document.getElementById('login-form')?.reset();
-  if (loginError) loginError.classList.add('hidden');
   showToast('Sesión cerrada correctamente.', 'info');
+  window.location.reload();
 });
 
 /* ─────────────────────────────────────────────────────
@@ -385,13 +430,19 @@ document.getElementById('logout-btn')?.addEventListener('click', () => {
    ───────────────────────────────────────────────────── */
 async function loadDashboard() {
   try {
-    const [kpisR, resumenR, riesgoR, ordenesR, bodegasR] = await Promise.allSettled([
+    const fetches = [
       apiFetch('/api/kpis'),
       apiFetchOptional('/api/panel/resumen'),
       apiFetch('/api/productos/riesgo'),
       apiFetch('/api/ordenes?estado=BORRADOR'),
       apiFetch('/api/bodegas'),
-    ]);
+    ];
+    if (isAdmin()) {
+      fetches.push(apiFetch('/api/ordenes?estado=APROBADA'));
+    }
+    const results = await Promise.allSettled(fetches);
+    const [kpisR, resumenR, riesgoR, ordenesR, bodegasR, aprobadasR] = results;
+
     if (bodegasR.status === 'fulfilled') bodegasCache = bodegasR.value || [];
     if (kpisR.status === 'fulfilled') renderKpis(kpisR.value);
     else showToast(kpisR.reason?.message || 'No se pudieron cargar los KPIs', 'error');
@@ -399,6 +450,10 @@ async function loadDashboard() {
     renderRiesgo(riesgoR.status === 'fulfilled' ? riesgoR.value || [] : []);
     const borradores = ordenesR.status === 'fulfilled' ? ordenesR.value || [] : [];
     renderOrdenesTabla('tbody-ordenes-borrador', borradores, true);
+    if (isAdmin()) {
+      const aprobadas = aprobadasR?.status === 'fulfilled' ? aprobadasR.value || [] : [];
+      renderOrdenesAprobadasDashboard(aprobadas);
+    }
     setApiStatus(true);
   } catch (e) {
     setApiStatus(false);
@@ -572,6 +627,30 @@ function renderOrdenesTabla(tbodyId, ordenes, compacto) {
   }).join('');
 }
 
+function renderOrdenesAprobadasDashboard(ordenes) {
+  const tbody = document.getElementById('tbody-ordenes-aprobada');
+  const card = document.getElementById('card-ordenes-aprobada');
+  if (!tbody) return;
+  if (!ordenes.length) {
+    tbody.innerHTML = '<tr><td colspan="7"><div class="table-loading">No hay órdenes pendientes de recepción</div></td></tr>';
+    if (card) card.classList.toggle('hidden', true);
+    return;
+  }
+  if (card) card.classList.remove('hidden');
+  tbody.innerHTML = ordenes.map((raw) => {
+    const o = etiquetaOrden(raw);
+    return `<tr>
+      <td>#${o.id}</td>
+      <td>${escapeHtml(o.producto)}</td>
+      <td>${escapeHtml(o.proveedor)}</td>
+      <td>${o.cantidad}</td>
+      <td>${formatCurrency(o.total)}</td>
+      <td>${escapeHtml(o.bodega)}</td>
+      <td>${botonesEstado(raw)}</td>
+    </tr>`;
+  }).join('');
+}
+
 async function loadOrdenes() {
   try {
     bodegasCache = await apiFetch('/api/bodegas') || bodegasCache;
@@ -697,7 +776,7 @@ async function loadBodegas() {
     renderBodegasTable(bodegasData);
     setApiStatus(true);
   } catch (e) {
-    showTableError('tbody-bodegas', 6, e.message);
+    showTableError('tbody-bodegas', isAdmin() ? 6 : 5, e.message);
     setApiStatus(false);
   }
 }
@@ -705,15 +784,16 @@ async function loadBodegas() {
 function renderBodegasTable(data) {
   const tbody = document.getElementById('tbody-bodegas');
   if (!tbody) return;
-  if (!data.length) { tbody.innerHTML = `<tr><td colspan="6"><div class="table-loading">No hay bodegas registradas</div></td></tr>`; return; }
+  const cols = isAdmin() ? 6 : 5;
+  if (!data.length) { tbody.innerHTML = `<tr><td colspan="${cols}"><div class="table-loading">No hay bodegas registradas</div></td></tr>`; return; }
   tbody.innerHTML = data.map(b => `
     <tr>
       <td><span style="font-weight:600;color:var(--clr-txt-muted)">#${b.id}</span></td>
       <td style="font-weight:500">${escapeHtml(b.nombre)}</td>
       <td>${escapeHtml(b.ubicacion)}</td>
       <td>${Number(b.capacidad).toLocaleString('es-CO')} uds</td>
-      <td>${escapeHtml(b.encargado)}</td>
-      <td>
+      <td>${escapeHtml(nombreEncargado(b))}</td>
+      ${isAdmin() ? `<td>
         <div class="actions-cell">
           <button class="btn-icon" onclick="editBodega(${b.id})" title="Editar">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
@@ -722,7 +802,7 @@ function renderBodegasTable(data) {
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
           </button>
         </div>
-      </td>
+      </td>` : ''}
     </tr>
   `).join('');
 }
@@ -732,7 +812,7 @@ document.getElementById('search-bodegas')?.addEventListener('input', (e) => {
   renderBodegasTable(bodegasData.filter(b =>
     b.nombre.toLowerCase().includes(q) ||
     b.ubicacion.toLowerCase().includes(q) ||
-    b.encargado.toLowerCase().includes(q)
+    nombreEncargado(b).toLowerCase().includes(q)
   ));
 });
 
@@ -745,13 +825,15 @@ document.getElementById('btn-nueva-bodega')?.addEventListener('click', () => {
 });
 
 function editBodega(id) {
+  if (!isAdmin()) return;
   const b = bodegasData.find(x => x.id === id);
   if (!b) return;
   document.getElementById('bodega-id').value = b.id;
   document.getElementById('bodega-nombre').value = b.nombre;
   document.getElementById('bodega-ubicacion').value = b.ubicacion;
   document.getElementById('bodega-capacidad').value = b.capacidad;
-  document.getElementById('bodega-encargado').value = b.encargado;
+  const encargadoLabel = nombreEncargado(b);
+  document.getElementById('bodega-encargado').value = encargadoLabel === 'Sin asignar' ? '' : encargadoLabel;
   document.getElementById('modal-bodega-title').textContent = 'Editar Bodega';
   document.getElementById('bodega-error').classList.add('hidden');
   openModal('modal-bodega');
@@ -759,6 +841,7 @@ function editBodega(id) {
 
 document.getElementById('form-bodega')?.addEventListener('submit', async (e) => {
   e.preventDefault();
+  if (!isAdmin()) return;
   const id = document.getElementById('bodega-id').value;
   const body = {
     nombre: document.getElementById('bodega-nombre').value.trim(),
@@ -800,7 +883,7 @@ async function loadProductos() {
     renderProductosTable(productosData);
     setApiStatus(true);
   } catch (e) {
-    showTableError('tbody-productos', 6, e.message);
+    showTableError('tbody-productos', isAdmin() ? 6 : 5, e.message);
     setApiStatus(false);
   }
 }
@@ -808,7 +891,8 @@ async function loadProductos() {
 function renderProductosTable(data) {
   const tbody = document.getElementById('tbody-productos');
   if (!tbody) return;
-  if (!data.length) { tbody.innerHTML = `<tr><td colspan="6"><div class="table-loading">No hay productos registrados</div></td></tr>`; return; }
+  const cols = isAdmin() ? 6 : 5;
+  if (!data.length) { tbody.innerHTML = `<tr><td colspan="${cols}"><div class="table-loading">No hay productos registrados</div></td></tr>`; return; }
   tbody.innerHTML = data.map(p => `
     <tr>
       <td><span style="font-weight:600;color:var(--clr-txt-muted)">#${p.id}</span></td>
@@ -816,7 +900,7 @@ function renderProductosTable(data) {
       <td><span class="badge badge-empleado">${escapeHtml(p.categoria)}</span></td>
       <td class="${p.stock < 10 ? 'stock-low' : 'stock-ok'}">${p.stock} uds ${p.stock < 10 ? '⚠' : ''}</td>
       <td>${formatCurrency(p.precio)}</td>
-      <td>
+      ${isAdmin() ? `<td>
         <div class="actions-cell">
           <button class="btn-icon" onclick="editProducto(${p.id})" title="Editar">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
@@ -825,7 +909,7 @@ function renderProductosTable(data) {
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
           </button>
         </div>
-      </td>
+      </td>` : ''}
     </tr>
   `).join('');
 }
@@ -903,6 +987,7 @@ document.getElementById('producto-bodega')?.addEventListener('change', () => {
 });
 
 async function editProducto(id) {
+  if (!isAdmin()) return;
   const p = productosData.find(x => x.id === id);
   if (!p) return;
   document.getElementById('producto-id').value = p.id;
@@ -929,6 +1014,7 @@ async function editProducto(id) {
 
 document.getElementById('form-producto')?.addEventListener('submit', async (e) => {
   e.preventDefault();
+  if (!isAdmin()) return;
   const id = document.getElementById('producto-id').value;
   const stockVal = parseInt(document.getElementById('producto-stock').value);
   const bodegaIdVal = document.getElementById('producto-bodega')?.value;
@@ -1097,6 +1183,10 @@ function removeDetalle(btn) {
 
 document.getElementById('form-movimiento')?.addEventListener('submit', async (e) => {
   e.preventDefault();
+  if (!isAdmin()) {
+    showToast('Solo un ADMIN puede registrar movimientos.', 'error');
+    return;
+  }
   const tipo = document.getElementById('mov-tipo').value;
   const usuarioId = document.getElementById('mov-usuario').value;
   const bodegaOrigenId = document.getElementById('mov-bodega-origen').value;
@@ -1375,6 +1465,7 @@ document.getElementById('btn-nuevo-usuario')?.addEventListener('click', () => {
 });
 
 function editUsuario(id) {
+  if (!isAdmin()) return;
   const u = usuariosData.find(x => x.id === id);
   if (!u) return;
   document.getElementById('usuario-id').value = u.id;
@@ -1389,6 +1480,7 @@ function editUsuario(id) {
 
 document.getElementById('form-usuario')?.addEventListener('submit', async (e) => {
   e.preventDefault();
+  if (!isAdmin()) return;
   const id = document.getElementById('usuario-id').value;
   const body = {
     username: document.getElementById('usuario-username').value.trim(),
@@ -1421,6 +1513,7 @@ document.getElementById('form-usuario')?.addEventListener('submit', async (e) =>
    DELETE CONFIRM
    ───────────────────────────────────────────────────── */
 function confirmDelete(type, id, name) {
+  if (!isAdmin()) return;
   document.getElementById('confirm-message').textContent =
     `¿Estás seguro de que deseas eliminar "${name}"? Esta acción no se puede deshacer.`;
   deleteCallback = async () => {
@@ -1487,7 +1580,6 @@ function showTableError(tbodyId, cols, msg) {
     jwtToken = saved;
     currentUser = savedUser || 'Usuario';
     currentRole = savedRol;
-    enterApp();
-    resolveCurrentRole();
+    resolveCurrentRole().then(() => enterApp());
   }
 })();

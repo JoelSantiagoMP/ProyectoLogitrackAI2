@@ -1,5 +1,6 @@
 package com.example.logitrack.dto;
 
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 
@@ -19,6 +20,7 @@ public class OrdenCompraRequest {
     private Integer cantidad;
 
     @NotNull(message = "El precio unitario es obligatorio")
+    @DecimalMin(value = "0.01", message = "El precio unitario debe ser mayor que 0")
     private Double precioUnitario;
 
     public Long getProductoId() {

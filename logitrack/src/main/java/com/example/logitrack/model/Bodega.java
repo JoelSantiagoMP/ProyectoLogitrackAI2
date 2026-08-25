@@ -32,8 +32,7 @@ public class Bodega {
     @Column(nullable = false)
     private Integer capacidad;
 
-    @NotNull(message = "El encargado es obligatorio")
-    @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "encargado_id", nullable = false)
-    private Usuario encargado;
+    @NotBlank(message = "El encargado es obligatorio")
+    @Column(nullable = false, length = 150)
+    private String encargado;
 }

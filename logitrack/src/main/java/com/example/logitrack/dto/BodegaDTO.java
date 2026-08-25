@@ -16,16 +16,17 @@ public class BodegaDTO {
     @Min(value = 0, message = "La capacidad no puede ser negativa")
     private Integer capacidad;
 
-    private Long encargadoId;
+    @NotBlank(message = "El encargado es obligatorio")
+    private String encargado;
 
     public BodegaDTO() {
     }
 
-    public BodegaDTO(String nombre, String ubicacion, Integer capacidad, Long encargadoId) {
+    public BodegaDTO(String nombre, String ubicacion, Integer capacidad, String encargado) {
         this.nombre = nombre;
         this.ubicacion = ubicacion;
         this.capacidad = capacidad;
-        this.encargadoId = encargadoId;
+        this.encargado = encargado;
     }
 
     public String getNombre() {
@@ -52,11 +53,11 @@ public class BodegaDTO {
         this.capacidad = capacidad;
     }
 
-    public Long getEncargadoId() {
-        return encargadoId;
+    public String getEncargado() {
+        return encargado;
     }
 
-    public void setEncargadoId(Long encargadoId) {
-        this.encargadoId = encargadoId;
+    public void setEncargado(String encargado) {
+        this.encargado = encargado;
     }
 }

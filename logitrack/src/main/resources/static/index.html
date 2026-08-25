@@ -136,15 +136,15 @@
           <span>Reportes</span>
         </a>
 
-        <div class="nav-section-label">Sistema</div>
-        <a class="nav-item" href="#" data-page="auditoria" id="nav-auditoria">
+        <div class="nav-section-label admin-only">Sistema</div>
+        <a class="nav-item admin-only" href="#" data-page="auditoria" id="nav-auditoria">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
             <line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/>
           </svg>
           <span>Auditoría</span>
         </a>
-        <a class="nav-item" href="#" data-page="usuarios" id="nav-usuarios">
+        <a class="nav-item admin-only" href="#" data-page="usuarios" id="nav-usuarios">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
             <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
@@ -331,6 +331,33 @@
               </div>
             </div>
           </div>
+
+          <div class="card mt-card admin-only" id="card-ordenes-aprobada">
+            <div class="card-header">
+              <h3 class="card-title">Órdenes APROBADAS — pendientes de recepción</h3>
+              <button class="btn btn-ghost btn-sm" onclick="navigateTo('ordenes'); setTimeout(() => { const f = document.getElementById('filter-estado-orden'); if (f) { f.value = 'APROBADA'; loadOrdenes(); } }, 50);">Ver todas</button>
+            </div>
+            <div class="card-body p-0">
+              <div class="table-wrapper">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Producto</th>
+                      <th>Proveedor</th>
+                      <th>Cantidad</th>
+                      <th>Total</th>
+                      <th>Bodega</th>
+                      <th>Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tbody-ordenes-aprobada">
+                    <tr><td colspan="7"><div class="table-loading">Cargando…</div></td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
         </section>
 
         <section id="page-ordenes" class="page">
@@ -376,7 +403,7 @@
         <!-- ========== BODEGAS PAGE ========== -->
         <section id="page-bodegas" class="page">
           <div class="page-actions">
-            <button class="btn btn-primary" id="btn-nueva-bodega">
+            <button class="btn btn-primary admin-only" id="btn-nueva-bodega">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                 <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
               </svg>
@@ -395,7 +422,7 @@
                 <table class="data-table" id="table-bodegas">
                   <thead>
                     <tr>
-                      <th>ID</th><th>Nombre</th><th>Ubicación</th><th>Capacidad</th><th>Encargado</th><th>Acciones</th>
+                      <th>ID</th><th>Nombre</th><th>Ubicación</th><th>Capacidad</th><th>Encargado</th><th class="admin-only">Acciones</th>
                     </tr>
                   </thead>
                   <tbody id="tbody-bodegas">
@@ -410,7 +437,7 @@
         <!-- ========== PRODUCTOS PAGE ========== -->
         <section id="page-productos" class="page">
           <div class="page-actions">
-            <button class="btn btn-primary" id="btn-nuevo-producto">
+            <button class="btn btn-primary admin-only" id="btn-nuevo-producto">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                 <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
               </svg>
@@ -437,7 +464,7 @@
                 <table class="data-table" id="table-productos">
                   <thead>
                     <tr>
-                      <th>ID</th><th>Nombre</th><th>Categoría</th><th>Stock</th><th>Precio</th><th>Acciones</th>
+                      <th>ID</th><th>Nombre</th><th>Categoría</th><th>Stock</th><th>Precio</th><th class="admin-only">Acciones</th>
                     </tr>
                   </thead>
                   <tbody id="tbody-productos">
@@ -452,7 +479,7 @@
         <!-- ========== MOVIMIENTOS PAGE ========== -->
         <section id="page-movimientos" class="page">
           <div class="page-actions">
-            <button class="btn btn-primary" id="btn-nuevo-movimiento">
+            <button class="btn btn-primary admin-only" id="btn-nuevo-movimiento">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                 <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
               </svg>
@@ -571,7 +598,7 @@
         <!-- ========== USUARIOS PAGE ========== -->
         <section id="page-usuarios" class="page">
           <div class="page-actions">
-            <button class="btn btn-primary" id="btn-nuevo-usuario">
+            <button class="btn btn-primary admin-only" id="btn-nuevo-usuario">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                 <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
               </svg>
@@ -609,7 +636,7 @@
   <!-- ==================== MODALS ==================== -->
 
   <!-- Modal Bodega -->
-  <div id="modal-bodega" class="modal-backdrop hidden">
+  <div id="modal-bodega" class="modal-backdrop hidden admin-only">
     <div class="modal">
       <div class="modal-header">
         <h3 class="modal-title" id="modal-bodega-title">Nueva Bodega</h3>
@@ -654,7 +681,7 @@
   </div>
 
   <!-- Modal Producto -->
-  <div id="modal-producto" class="modal-backdrop hidden">
+  <div id="modal-producto" class="modal-backdrop hidden admin-only">
     <div class="modal">
       <div class="modal-header">
         <h3 class="modal-title" id="modal-producto-title">Nuevo Producto</h3>
@@ -706,7 +733,7 @@
   </div>
 
   <!-- Modal Movimiento -->
-  <div id="modal-movimiento" class="modal-backdrop hidden">
+  <div id="modal-movimiento" class="modal-backdrop hidden admin-only">
     <div class="modal modal-lg">
       <div class="modal-header">
         <h3 class="modal-title">Registrar Movimiento</h3>
@@ -770,7 +797,7 @@
   </div>
 
   <!-- Modal Usuario -->
-  <div id="modal-usuario" class="modal-backdrop hidden">
+  <div id="modal-usuario" class="modal-backdrop hidden admin-only">
     <div class="modal">
       <div class="modal-header">
         <h3 class="modal-title" id="modal-usuario-title">Nuevo Usuario</h3>
@@ -826,7 +853,7 @@
   </div>
 
   <!-- Modal Confirmar Eliminar -->
-  <div id="modal-confirm" class="modal-backdrop hidden">
+  <div id="modal-confirm" class="modal-backdrop hidden admin-only">
     <div class="modal modal-sm">
       <div class="modal-header">
         <h3 class="modal-title">Confirmar Eliminación</h3>

@@ -133,7 +133,7 @@ class OrdenCompraEstadoTest {
                 .nombre("Bodega IQ")
                 .ubicacion("Bogota")
                 .capacidad(500)
-                .encargado(admin)
+                .encargado("Carlos Ramírez")
                 .build());
         bodegaId = bodega.getId();
 

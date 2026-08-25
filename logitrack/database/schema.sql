@@ -1,3 +1,7 @@
+-- LogiTrack IQ — esquema PostgreSQL (reto anterior + torre de control)
+-- Esquema: logitrack
+-- Ejecutar antes de data.sql en una base vacía.
+
 CREATE SCHEMA IF NOT EXISTS logitrack;
 SET search_path TO logitrack;
 
@@ -6,7 +10,7 @@ CREATE TABLE IF NOT EXISTS usuario (
     username VARCHAR(50) UNIQUE NOT NULL,
     password VARCHAR(255) NOT NULL,
     rol VARCHAR(20) NOT NULL,
-    CONSTRAINT rol_check CHECK (rol IN ('ADMIN', 'EMPLEADO'))
+    CONSTRAINT rol_check CHECK (rol IN ('ADMIN', 'EMPLEADO', 'AGENTE'))
 );
 
 CREATE TABLE IF NOT EXISTS bodega (
@@ -14,20 +18,28 @@ CREATE TABLE IF NOT EXISTS bodega (
     nombre VARCHAR(100) NOT NULL,
     ubicacion VARCHAR(150),
     capacidad INTEGER NOT NULL,
-    encargado_id BIGINT NOT NULL,
-    CONSTRAINT capacidad_check CHECK (capacidad >= 0),
-    CONSTRAINT fk_bodega_encargado FOREIGN KEY (encargado_id) REFERENCES usuario(id)
+    encargado VARCHAR(150) NOT NULL,
+    CONSTRAINT capacidad_check CHECK (capacidad > 0)
+);
+
+CREATE TABLE IF NOT EXISTS proveedor (
+    id BIGSERIAL PRIMARY KEY,
+    nombre VARCHAR(150) NOT NULL,
+    contacto VARCHAR(150),
+    dias_entrega INTEGER NOT NULL,
+    CONSTRAINT proveedor_dias_entrega_check CHECK (dias_entrega BETWEEN 1 AND 90)
 );
 
 CREATE TABLE IF NOT EXISTS producto (
     id BIGSERIAL PRIMARY KEY,
-    nombre VARCHAR(150) NOT NULL,
+    nombre VARCHAR(150) NOT NULL UNIQUE,
     categoria VARCHAR(100),
     precio DECIMAL(10, 2) NOT NULL,
-    CONSTRAINT precio_check CHECK (precio >= 0)
+    proveedor_principal_id BIGINT,
+    CONSTRAINT precio_check CHECK (precio >= 0),
+    CONSTRAINT fk_producto_proveedor FOREIGN KEY (proveedor_principal_id) REFERENCES proveedor(id)
 );
 
--- Nueva tabla intermedia para gestionar el stock real por bodega
 CREATE TABLE IF NOT EXISTS inventario_bodega (
     id BIGSERIAL PRIMARY KEY,
     bodega_id BIGINT NOT NULL,
@@ -75,4 +87,32 @@ CREATE TABLE IF NOT EXISTS auditoria (
     CONSTRAINT fk_auditoria_usuario FOREIGN KEY (usuario_responsable_id) REFERENCES usuario(id)
 );
 
-ALTER TABLE logitrack.auditoria ADD COLUMN IF NOT EXISTS entidad_id BIGINT;
+CREATE TABLE IF NOT EXISTS orden_compra (
+    id BIGSERIAL PRIMARY KEY,
+    producto_id BIGINT NOT NULL,
+    proveedor_id BIGINT NOT NULL,
+    bodega_destino_id BIGINT NOT NULL,
+    cantidad INTEGER NOT NULL,
+    precio_unitario DOUBLE PRECISION NOT NULL,
+    total DOUBLE PRECISION NOT NULL,
+    fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    estado VARCHAR(20) NOT NULL DEFAULT 'BORRADOR',
+    creado_por_id BIGINT NOT NULL,
+    pdf BYTEA,
+    fecha_generacion_pdf TIMESTAMP,
+    CONSTRAINT orden_cantidad_check CHECK (cantidad > 0),
+    CONSTRAINT orden_estado_check CHECK (estado IN ('BORRADOR', 'APROBADA', 'RECIBIDA', 'CANCELADA')),
+    CONSTRAINT fk_orden_producto FOREIGN KEY (producto_id) REFERENCES producto(id),
+    CONSTRAINT fk_orden_proveedor FOREIGN KEY (proveedor_id) REFERENCES proveedor(id),
+    CONSTRAINT fk_orden_bodega FOREIGN KEY (bodega_destino_id) REFERENCES bodega(id),
+    CONSTRAINT fk_orden_autor FOREIGN KEY (creado_por_id) REFERENCES usuario(id)
+);
+
+CREATE TABLE IF NOT EXISTS resumen_panel (
+    id BIGSERIAL PRIMARY KEY,
+    fecha DATE NOT NULL,
+    contenido_json TEXT NOT NULL,
+    autor_id BIGINT NOT NULL,
+    CONSTRAINT uk_resumen_panel_fecha UNIQUE (fecha),
+    CONSTRAINT fk_resumen_autor FOREIGN KEY (autor_id) REFERENCES usuario(id)
+);

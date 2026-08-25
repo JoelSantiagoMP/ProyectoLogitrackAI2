@@ -59,12 +59,12 @@ Casillas según el proceso SDD/TDD del reto. Las pruebas de reglas nuevas se esc
 - [x] Tool `crear_orden_borrador`
 - [x] Tool `publicar_resumen`
 - [x] Confirmar que **no** existe tool de aprobar
-- [ ] Evidencia entrada/respuesta de cada herramienta → [`docs/evidencia/mcp-tools.md`](../evidencia/mcp-tools.md)
+- [x] Evidencia entrada/respuesta de cada herramienta → [`docs/evidencia/mcp-tools.md`](../evidencia/mcp-tools.md)
 - [x] `skills/operacion-logitrack/SKILL.md` (consultas primero, máx. 1 orden, no aprobar/recibir, JSON válido, error explícito)
 - [x] Flujo único `n8n/resumen-diario-inventario.json` (cron 6:00 `America/Bogota`)
 - [x] Cantidad `ceil(max(1, puntoReorden × 2 - stockTotal))` para el primer producto en riesgo
-- [ ] Captura de ejecución exitosa → [`docs/evidencia/n8n-ejecucion.md`](../evidencia/n8n-ejecucion.md) sección A
-- [ ] Captura de error controlado **sin** crear una orden indebida → sección B
+- [x] Captura de ejecución exitosa → [`docs/evidencia/n8n-ejecucion.md`](../evidencia/n8n-ejecucion.md) sección A
+- [x] Captura de error controlado **sin** crear una orden indebida → sección B
 
 ## E. Dashboard y PDF (criterio 4)
 
@@ -75,7 +75,7 @@ Casillas según el proceso SDD/TDD del reto. Las pruebas de reglas nuevas se esc
 - [x] Tabla de productos en riesgo y órdenes `BORRADOR`
 - [x] Generar y visualizar PDF `BORRADOR` con marca de agua diagonal
 - [x] Botón Aprobar solo para `ADMIN`; tabla se actualiza al aprobar
-- [ ] Evidencia de PDF guardado con watermark → [`docs/evidencia/pdf-borrador.md`](../evidencia/pdf-borrador.md)
+- [x] Evidencia de PDF guardado con watermark → [`docs/evidencia/pdf-borrador.md`](../evidencia/pdf-borrador.md)
 
 ## F. Video y flujo completo (criterio 2)
 

@@ -1,41 +1,44 @@
 # Evidencia operativa — LogiTrack IQ
 
-Plantillas y guías para completar los entregables que requieren capturas o logs reales (criterios 2, 3 y 4 de la rúbrica).
+Evidencias generadas el **2026-08-25** con backend (`:8080`), MCP (`:3100`) y API reales.
 
-## Requisitos previos
+## Regenerar capturas
 
-1. Backend Spring Boot en `http://localhost:8080` (`cd logitrack && ./mvnw spring-boot:run`).
-2. Datos cargados (`logitrack/database/schema_supabase.sql` o `schema.sql` + `data.sql`).
-3. MCP en Streamable HTTP (`MCP_TRANSPORT=streamable-http`, puerto `3100`).
-4. Usuario AGENTE: `agente_mcp` / `123456`.
+```bash
+cd logitrack && ./mvnw spring-boot:run          # terminal 1
+cd mcp-server && source .venv/bin/activate
+MCP_TRANSPORT=streamable-http MCP_PORT=3100 python main.py   # terminal 2
+cd mcp-server && python ../docs/evidencia/generar_capturas.py  # terminal 3
+```
 
-## Contenido de esta carpeta
+## Archivos
 
-| Archivo / carpeta | Propósito |
+| Documento | Estado |
 | --- | --- |
-| [mcp-tools.md](mcp-tools.md) | Entrada/salida esperada de las 6 tools MCP |
-| [n8n-ejecucion.md](n8n-ejecucion.md) | Plantilla para ejecución exitosa y error controlado |
-| [pdf-borrador.md](pdf-borrador.md) | Evidencia del PDF con marca de agua |
-| `capturas/` | Guardar aquí PNG/JPG (gitignore opcional si son pesadas) |
+| [mcp-tools.md](mcp-tools.md) | 6/6 tools con captura |
+| [n8n-ejecucion.md](n8n-ejecucion.md) | Éxito + error controlado |
+| [pdf-borrador.md](pdf-borrador.md) | Watermark + 404 tras aprobar |
+| [capturas-evidencia.json](capturas-evidencia.json) | Log JSON de respuestas MCP |
+| [generar_capturas.py](generar_capturas.py) | Script reproducible |
 
-## Cómo adjuntar evidencia
+## Capturas (`capturas/`)
 
-1. Ejecuta cada comando o flujo.
-2. Guarda captura en `capturas/` con nombre descriptivo, por ejemplo:
-   - `capturas/mcp-consultar-kpis.png`
-   - `capturas/n8n-exito-2026-08-25.png`
-   - `capturas/n8n-error-mcp-caido.png`
-   - `capturas/pdf-borrador-watermark.png`
-3. Enlaza la ruta relativa en la plantilla correspondiente (`mcp-tools.md`, `n8n-ejecucion.md`, etc.).
-4. Opcional: pega logs en bloques ` ```text ` dentro de esas plantillas.
+| Archivo | Descripción |
+| --- | --- |
+| `mcp-consultar-*.png` | 6 tools MCP |
+| `n8n-exito-*.png` | Flujo exitoso (respuestas reales) |
+| `n8n-error-*.png` | Error MCP sin orden indebida |
+| `pdf-borrador-watermark.png` | Marca de agua diagonal BORRADOR |
+| `pdf-404-tras-aprobar.png` | PDF invalidado al cambiar estado |
+| `orden-borrador-1.pdf` | PDF binario guardado |
 
-## Checklist rápido
+## Checklist
 
-- [ ] 6 tools MCP documentadas (entrada + respuesta o captura)
-- [ ] n8n ejecución **exitosa** (KPIs + riesgo + resumen publicado)
-- [ ] n8n **error controlado** (sin orden indebida; p. ej. MCP caído)
-- [ ] PDF BORRADOR con watermark visible
-- [ ] Video 4–6 min (externo al repo; enlace opcional abajo)
+- [x] 6 tools MCP documentadas (entrada + respuesta + captura)
+- [x] n8n ejecución exitosa (KPIs + riesgo + resumen + 1 orden BORRADOR)
+- [x] n8n error controlado (sin orden indebida)
+- [x] PDF BORRADOR con watermark visible
+- [ ] Video 4–6 min (externo al repo)
 
 ### Enlace al video (completar)
 

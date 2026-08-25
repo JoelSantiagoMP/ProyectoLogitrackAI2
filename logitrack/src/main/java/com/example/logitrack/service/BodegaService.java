@@ -57,15 +57,7 @@ public class BodegaService {
         bodega.setNombre(dto.getNombre());
         bodega.setUbicacion(dto.getUbicacion());
         bodega.setCapacidad(dto.getCapacidad());
-
-        if (dto.getEncargadoId() != null) {
-            Usuario encargadoReal = usuarioRepository.findById(dto.getEncargadoId())
-                    .orElseThrow(() -> new ResourceNotFoundException(
-                            "El usuario encargado no existe con ID: " + dto.getEncargadoId()));
-            bodega.setEncargado(encargadoReal);
-        } else {
-            bodega.setEncargado(usuarioResponsable);
-        }
+        bodega.setEncargado(dto.getEncargado().trim());
 
         Bodega guardada = bodegaRepository.save(bodega);
 
@@ -76,7 +68,7 @@ public class BodegaService {
                 guardada.getId(),
                 null,
                 guardada.getNombre() + " (Ubicación: " + guardada.getUbicacion() + ", Capacidad: "
-                        + guardada.getCapacidad() + ")");
+                        + guardada.getCapacidad() + ", Encargado: " + guardada.getEncargado() + ")");
 
         return guardada;
     }
@@ -89,22 +81,17 @@ public class BodegaService {
                 .orElseThrow(() -> new ResourceNotFoundException("Usuario responsable no encontrado: " + username));
 
         String valorAnterior = bodegaExistente.getNombre() + " (Ubicación: " + bodegaExistente.getUbicacion()
-                + ", Capacidad: " + bodegaExistente.getCapacidad() + ")";
+                + ", Capacidad: " + bodegaExistente.getCapacidad() + ", Encargado: "
+                + bodegaExistente.getEncargado() + ")";
 
         bodegaExistente.setNombre(dto.getNombre());
         bodegaExistente.setUbicacion(dto.getUbicacion());
         bodegaExistente.setCapacidad(dto.getCapacidad());
-
-        if (dto.getEncargadoId() != null) {
-            Usuario encargadoReal = usuarioRepository.findById(dto.getEncargadoId())
-                    .orElseThrow(() -> new ResourceNotFoundException(
-                            "El usuario encargado no existe con ID: " + dto.getEncargadoId()));
-            bodegaExistente.setEncargado(encargadoReal);
-        }
+        bodegaExistente.setEncargado(dto.getEncargado().trim());
 
         Bodega guardada = bodegaRepository.save(bodegaExistente);
         String valorNuevo = guardada.getNombre() + " (Ubicación: " + guardada.getUbicacion() + ", Capacidad: "
-                + guardada.getCapacidad() + ")";
+                + guardada.getCapacidad() + ", Encargado: " + guardada.getEncargado() + ")";
 
         auditoriaService.registrarAuditoria(
                 TipoOperacion.UPDATE,
@@ -124,8 +111,7 @@ public class BodegaService {
         Usuario usuarioResponsable = usuarioRepository.findByUsername(username)
                 .orElseThrow(() -> new ResourceNotFoundException("Usuario responsable no encontrado: " + username));
 
-        String valorAnterior = bodega.getNombre() + " (Encargado ID: "
-                + (bodega.getEncargado() != null ? bodega.getEncargado().getId() : "N/A") + ")";
+        String valorAnterior = bodega.getNombre() + " (Encargado: " + bodega.getEncargado() + ")";
 
         bodegaRepository.delete(bodega);
 

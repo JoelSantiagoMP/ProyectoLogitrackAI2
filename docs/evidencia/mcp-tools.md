@@ -1,18 +1,17 @@
 # Evidencia — 6 tools MCP
 
 Servidor: `http://localhost:3100/mcp` (Streamable HTTP)  
-Usuario backend: `agente_mcp` / `123456`
+Usuario backend: `agente_mcp` / `123456`  
+**Fecha de generación:** 2026-08-25 18:15:32 (America/Bogota)
 
-Verificación rápida de que el MCP responde:
+Regenerar capturas:
 
 ```bash
-curl -s -X POST http://localhost:3100/mcp \
-  -H "Content-Type: application/json" \
-  -H "Accept: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"evidencia","version":"1.0"}}}'
+# Backend :8080 y MCP :3100 activos
+cd mcp-server && source .venv/bin/activate
+pip install pillow pymupdf requests
+python ../docs/evidencia/generar_capturas.py
 ```
-
-Alternativa: invocar cada tool desde **Cursor MCP**, **n8n AI Agent** o el inspector MCP de tu cliente.
 
 ---
 
@@ -22,28 +21,21 @@ Alternativa: invocar cada tool desde **Cursor MCP**, **n8n AI Agent** o el inspe
 
 | Campo | Valor |
 | --- | --- |
-| Fecha prueba | `_YYYY-MM-DD_` |
-| Captura | `capturas/mcp-consultar-kpis.png` |
+| Fecha prueba | 2026-08-25 |
+| Captura | [capturas/mcp-consultar-kpis.png](capturas/mcp-consultar-kpis.png) |
 
 **Entrada (parámetros):** ninguno
 
-**Salida esperada (fragmento):**
+**Salida real (fragmento):**
 
 ```json
 {
-  "calculadoEn": "2026-08-25T06:00:00-05:00",
-  "ocupacionPorBodega": [{ "bodegaId": 1, "nombre": "...", "porcentaje": 92.5 }],
-  "productosEnQuiebre": 1,
+  "calculadoEn": "2026-08-25T18:15:32.654907-05:00",
+  "productosEnQuiebre": 0,
   "productosEnRiesgo": 2,
-  "ordenesPorAprobar": { "cantidad": 1, "montoTotal": 45000.0 },
-  "movimientosAyer": { "entrada": 2, "salida": 3, "transferencia": 1 }
+  "ordenesPorAprobar": { "cantidad": 2, "montoTotal": 740082.0 },
+  "movimientosAyer": { "entrada": 1, "salida": 0, "transferencia": 0 }
 }
-```
-
-**Log / notas:**
-
-```text
-_pegar respuesta real o error_
 ```
 
 ---
@@ -54,18 +46,10 @@ _pegar respuesta real o error_
 
 | Campo | Valor |
 | --- | --- |
-| Fecha prueba | `_YYYY-MM-DD_` |
-| Captura | `capturas/mcp-consultar-productos-riesgo.png` |
+| Fecha prueba | 2026-08-25 |
+| Captura | [capturas/mcp-consultar-productos-riesgo.png](capturas/mcp-consultar-productos-riesgo.png) |
 
-**Entrada:** ninguno
-
-**Salida esperada (por elemento):** `productoId`, `nombreProducto`, `proveedorId`, `stockTotal`, `consumoDiarioPromedio`, `puntoReorden`, `diasCobertura`, `estadoCobertura`, `bodegaDestinoId`
-
-**Log / notas:**
-
-```text
-
-```
+**Salida real:** 2 productos — Resma Papel A4 (id 10), Toner Laser Negro (id 11), con `puntoReorden`, `diasCobertura`, `bodegaDestinoId`.
 
 ---
 
@@ -75,18 +59,10 @@ _pegar respuesta real o error_
 
 | Campo | Valor |
 | --- | --- |
-| Fecha prueba | `_YYYY-MM-DD_` |
-| Captura | `capturas/mcp-consultar-bodegas-criticas.png` |
+| Fecha prueba | 2026-08-25 |
+| Captura | [capturas/mcp-consultar-bodegas-criticas.png](capturas/mcp-consultar-bodegas-criticas.png) |
 
-**Entrada:** ninguno
-
-**Salida esperada:** lista con bodegas donde `porcentaje >= 90`
-
-**Log / notas:**
-
-```text
-
-```
+**Salida real:** `[]` (ninguna bodega ≥ 90 % en el momento de la prueba).
 
 ---
 
@@ -96,26 +72,18 @@ _pegar respuesta real o error_
 
 | Campo | Valor |
 | --- | --- |
-| Fecha prueba | `_YYYY-MM-DD_` |
-| `producto_id` usado | `_ej. 1_` |
-| Captura | `capturas/mcp-consultar-stock-producto.png` |
+| Fecha prueba | 2026-08-25 |
+| `producto_id` usado | 10 (Resma Papel A4) |
+| Captura | [capturas/mcp-consultar-stock-producto.png](capturas/mcp-consultar-stock-producto.png) |
 
-**Entrada:** `producto_id` (entero existente en BD)
-
-**Salida esperada:**
+**Salida real:**
 
 ```json
 {
-  "productoId": 1,
-  "stockTotal": 42,
-  "porBodega": [{ "bodegaId": 1, "nombre": "...", "cantidad": 10 }]
+  "productoId": 10,
+  "stockTotal": 8,
+  "porBodega": [{ "bodegaId": 1, "nombre": "Bodega Principal Bucaramanga", "cantidad": 8 }]
 }
-```
-
-**Log / notas:**
-
-```text
-
 ```
 
 ---
@@ -126,30 +94,24 @@ _pegar respuesta real o error_
 
 | Campo | Valor |
 | --- | --- |
-| Fecha prueba | `_YYYY-MM-DD_` |
-| Captura | `capturas/mcp-crear-orden-borrador.png` |
+| Fecha prueba | 2026-08-25 |
+| Captura | [capturas/mcp-crear-orden-borrador.png](capturas/mcp-crear-orden-borrador.png) |
 
-**Entrada de ejemplo:**
+**Entrada usada:**
 
 ```json
 {
-  "producto_id": 1,
+  "producto_id": 10,
   "proveedor_id": 1,
-  "bodega_destino_id": 1,
-  "cantidad": 15,
-  "precio_unitario": 1000.0
+  "bodega_destino_id": 4,
+  "cantidad": 82,
+  "precio_unitario": 1.0
 }
 ```
 
-**Salida esperada:** orden con `"estado": "BORRADOR"` y `total` calculado en servidor.
+**Salida:** orden `#4` con `"estado": "BORRADOR"`, `total` calculado en servidor.
 
-**Confirmar:** no existe tool para aprobar/recibir/cancelar.
-
-**Log / notas:**
-
-```text
-
-```
+**Confirmado:** no existe tool para aprobar/recibir/cancelar.
 
 ---
 
@@ -159,23 +121,10 @@ _pegar respuesta real o error_
 
 | Campo | Valor |
 | --- | --- |
-| Fecha prueba | `_YYYY-MM-DD_` (debe ser hoy en America/Bogota) |
-| Captura | `capturas/mcp-publicar-resumen.png` |
+| Fecha prueba | 2026-08-25 |
+| Captura | [capturas/mcp-publicar-resumen.png](capturas/mcp-publicar-resumen.png) |
 
-**Entrada (vía parámetros MCP):**
-
-- `fecha`: `YYYY-MM-DD`
-- `narrativa`: 20–500 caracteres
-- `alertas[]`: severidad `BAJA|MEDIA|ALTA`, al menos un ID existente
-- `acciones_sugeridas[]`: tipo `REVISAR_ORDEN|REVISAR_PRODUCTO|REVISAR_BODEGA`, exactamente un ID
-
-**Verificar después:** `GET /api/panel/resumen` devuelve el JSON publicado.
-
-**Log / notas:**
-
-```text
-
-```
+**Verificado:** `GET /api/panel/resumen` devuelve el JSON publicado con narrativa, alertas y acción `REVISAR_ORDEN` (orden 4).
 
 ---
 
@@ -183,9 +132,11 @@ _pegar respuesta real o error_
 
 | Tool | Probada | Captura | OK |
 | --- | --- | --- | --- |
-| `consultar_kpis` | [ ] | [ ] | [ ] |
-| `consultar_productos_en_riesgo` | [ ] | [ ] | [ ] |
-| `consultar_bodegas_criticas` | [ ] | [ ] | [ ] |
-| `consultar_stock_producto` | [ ] | [ ] | [ ] |
-| `crear_orden_borrador` | [ ] | [ ] | [ ] |
-| `publicar_resumen` | [ ] | [ ] | [ ] |
+| `consultar_kpis` | [x] | [x] | [x] |
+| `consultar_productos_en_riesgo` | [x] | [x] | [x] |
+| `consultar_bodegas_criticas` | [x] | [x] | [x] |
+| `consultar_stock_producto` | [x] | [x] | [x] |
+| `crear_orden_borrador` | [x] | [x] | [x] |
+| `publicar_resumen` | [x] | [x] | [x] |
+
+Log completo: [capturas-evidencia.json](capturas-evidencia.json)

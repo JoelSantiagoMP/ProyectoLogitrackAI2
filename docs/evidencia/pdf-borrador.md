@@ -2,44 +2,50 @@
 
 Requisito: PDF guardado en la orden con **marca de agua diagonal** legible `BORRADOR`.
 
-## Pasos para generar evidencia
-
-1. Iniciar sesión como **ADMIN** (`admin_logitrack` / `123456`) en [http://localhost:8080](http://localhost:8080).
-2. Ir a **Órdenes de compra** o al dashboard (tabla órdenes BORRADOR).
-3. En una orden en estado `BORRADOR`, pulsar **Generar PDF** y luego **Ver**.
-4. Capturar pantalla del visor PDF mostrando la watermark.
+## Evidencia generada
 
 | Campo | Valor |
 | --- | --- |
-| Fecha | `_YYYY-MM-DD_` |
-| ID orden | `_ej. 14_` |
-| Captura UI | `capturas/pdf-generar-desde-dashboard.png` |
-| Captura watermark | `capturas/pdf-borrador-watermark.png` |
+| Fecha | 2026-08-25 |
+| ID orden | 1 (Resma Papel A4, estado BORRADOR) |
+| Captura UI / API | [capturas/pdf-generar-desde-dashboard.png](capturas/pdf-generar-desde-dashboard.png) |
+| Captura watermark | [capturas/pdf-borrador-watermark.png](capturas/pdf-borrador-watermark.png) |
+| PDF guardado | [capturas/orden-borrador-1.pdf](capturas/orden-borrador-1.pdf) |
 
-## Verificación por API (alternativa)
+![Marca de agua BORRADOR](capturas/pdf-borrador-watermark.png)
+
+## Pasos ejecutados
+
+1. `POST /api/ordenes/1/pdf` como **ADMIN** (`admin_logitrack` / `123456`).
+2. PDF guardado en BD (`fechaGeneracionPdf` actualizada).
+3. Rasterizado página 1 → `pdf-borrador-watermark.png` (marca diagonal visible).
+
+## Verificación tras cambio de estado
+
+1. `PATCH /api/ordenes/1/estado` → `APROBADA`.
+2. `GET /api/ordenes/1/pdf` → **HTTP 404** (PDF invalidado).
+3. Captura: [capturas/pdf-404-tras-aprobar.png](capturas/pdf-404-tras-aprobar.png)
+
+## Comandos de reproducción
 
 ```bash
 TOKEN=$(curl -s -X POST http://localhost:8080/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"admin_logitrack","password":"123456"}' | jq -r .accessToken)
 
-# Sustituir {id} por orden BORRADOR existente
-curl -s -X POST "http://localhost:8080/api/ordenes/{id}/pdf" \
+curl -s -X POST "http://localhost:8080/api/ordenes/1/pdf" \
   -H "Authorization: Bearer $TOKEN" \
-  -o capturas/orden-borrador-{id}.pdf
+  -o docs/evidencia/capturas/orden-borrador-1.pdf
 
-# Abrir el archivo y verificar watermark diagonal "BORRADOR"
+curl -s -o /dev/null -w "%{http_code}" \
+  "http://localhost:8080/api/ordenes/1/pdf" \
+  -H "Authorization: Bearer $TOKEN"
+# Tras aprobar: 404
 ```
-
-## Verificación tras cambio de estado
-
-1. Aprobar la orden (ADMIN) → `PATCH .../estado` con `APROBADA`.
-2. `GET /api/ordenes/{id}/pdf` debe responder **404** hasta regenerar PDF.
-3. Captura opcional: `capturas/pdf-404-tras-aprobar.png`
 
 ## Checklist
 
-- [ ] PDF generado y guardado (campo `fechaGeneracionPdf` en orden)
-- [ ] Watermark diagonal `BORRADOR` visible en captura
-- [ ] Tras aprobar: PDF anterior no disponible (404)
-- [ ] Regenerar PDF refleja nuevo estado (sin watermark BORRADOR si APROBADA)
+- [x] PDF generado y guardado
+- [x] Watermark diagonal `BORRADOR` visible en captura
+- [x] Tras aprobar: PDF anterior no disponible (404)
+- [ ] Regenerar PDF en estado APROBADA (sin watermark) — opcional para demo

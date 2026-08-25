@@ -15,7 +15,7 @@ Sistema de gestión de bodegas, inventario, movimientos y auditoría para LogiTr
 
 | Módulo | Descripción |
 | --- | --- |
-| Autenticación | Login JWT (`POST /api/auth/login`) |
+| Autenticación | Login JWT (`POST /auth/login`) |
 | Usuarios | CRUD con roles `ADMIN`, `EMPLEADO` y `AGENTE` |
 | Bodegas | CRUD de almacenes y encargado |
 | Productos | CRUD; el stock **no** se guarda en `producto`, se calcula desde `inventario_bodega` |
@@ -58,17 +58,20 @@ ALTER TABLE logitrack.auditoria ADD COLUMN IF NOT EXISTS entidad_id BIGINT;
 
 Scripts en `logitrack/database/`:
 
-1. `schema.sql` — crea el esquema `logitrack` y las tablas.
-2. `data.sql` — datos de ejemplo (opcional).
+1. **`schema.sql`** — crea el esquema `logitrack` y todas las tablas (reto anterior + IQ).
+2. **`data.sql`** — datos de demostración IQ (usuarios, proveedores, productos en riesgo, órdenes BORRADOR).
+3. **`schema_supabase.sql`** — script idempotente para Supabase o bases ya existentes (migración + datos IQ).
 
-Ejecútalos una vez contra PostgreSQL (cliente SQL, DBeaver, psql o el SQL Editor de Supabase).
+Ejecuta `schema.sql` y luego `data.sql` en una base vacía (psql, DBeaver o SQL Editor de Supabase).
 
 Modelo resumido:
 
-- `usuario` → `bodega` (encargado)
-- `producto` + `bodega` → `inventario_bodega` (stock real)
-- `movimiento` + `detalle_movimiento` (entrada / salida / transferencia)
-- `auditoria` (trazabilidad de operaciones)
+- `usuario` (roles `ADMIN`, `EMPLEADO`, `AGENTE`)
+- `proveedor`, `producto` (con `proveedor_principal_id` opcional)
+- `bodega` + `inventario_bodega` (stock por bodega)
+- `movimiento` + `detalle_movimiento`
+- `orden_compra`, `resumen_panel` (LogiTrack IQ)
+- `auditoria`
 
 ## Cómo ejecutar
 
@@ -126,7 +129,7 @@ Casos de prueba IQ: `src/test/java/com/example/logitrack/iq/`.
 
 Prefijo `/api`. Casi todos los recursos requieren JWT; `/api/auth/**` es público.
 
-- `POST /api/auth/login`
+- `POST /auth/login`
 - `GET|POST|PUT|DELETE /api/bodegas`
 - `GET|POST|PUT|DELETE /api/productos` — el POST acepta `stock` y `bodegaId` para inventario inicial
 - `GET /api/productos/stock-bajo`

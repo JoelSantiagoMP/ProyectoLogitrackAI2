@@ -262,7 +262,8 @@
   "active": false,
   "settings": {
     "executionOrder": "v1",
-    "binaryMode": "separate"
+    "binaryMode": "separate",
+    "timezone": "America/Bogota"
   },
   "versionId": "3a1cbf60-e0df-4fc8-a463-4e27f2dad510",
   "meta": {
