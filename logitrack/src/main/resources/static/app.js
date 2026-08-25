@@ -6,24 +6,40 @@
 const API_BASE = 'http://localhost:8080';
 let jwtToken = null;
 let currentUser = null;
+let currentRole = null;
 let deleteCallback = null;
+let bodegasCache = [];
+let ordenesCache = [];
 
 /* ─────────────────────────────────────────────────────
-   AUTH HELPERS — Token en sessionStorage
+   AUTH HELPERS — Token JWT solo en sessionStorage
    ───────────────────────────────────────────────────── */
 
-function saveSession(token, user) {
+function saveSession(token, user, rol) {
   jwtToken = token;
   currentUser = user;
+  if (rol) currentRole = rol;
   sessionStorage.setItem('logitrack_token', token);
   sessionStorage.setItem('logitrack_user', user);
+  if (rol) sessionStorage.setItem('logitrack_rol', rol);
+  try {
+    localStorage.removeItem('logitrack_token');
+    localStorage.removeItem('token');
+    localStorage.removeItem('jwt');
+  } catch (_) { /* ignore */ }
 }
 
 function clearSession() {
   jwtToken = null;
   currentUser = null;
+  currentRole = null;
   sessionStorage.removeItem('logitrack_token');
   sessionStorage.removeItem('logitrack_user');
+  sessionStorage.removeItem('logitrack_rol');
+}
+
+function isAdmin() {
+  return currentRole === 'ADMIN';
 }
 
 function forceLogout() {
@@ -62,7 +78,12 @@ async function apiFetch(path, options = {}) {
     }
 
     const text = await res.text();
-    const data = text ? JSON.parse(text) : null;
+    let data = null;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      data = { message: text || `Error ${res.status}` };
+    }
     if (!res.ok) {
       const msg = data?.message || data?.error || `Error ${res.status}`;
       throw new Error(msg);
@@ -75,6 +96,39 @@ async function apiFetch(path, options = {}) {
     }
     throw e;
   }
+}
+
+async function apiFetchOptional(path) {
+  const res = await fetch(API_BASE + path, { headers: getHeaders() });
+  if (res.status === 401 && jwtToken) {
+    forceLogout();
+    throw new Error('Sesión expirada.');
+  }
+  if (res.status === 404) return null;
+  const text = await res.text();
+  const data = text ? JSON.parse(text) : null;
+  if (!res.ok) throw new Error(data?.message || data?.error || `Error ${res.status}`);
+  return data;
+}
+
+async function apiFetchBlob(path, options = {}) {
+  const res = await fetch(API_BASE + path, {
+    ...options,
+    headers: { ...(options.headers || {}), Authorization: jwtToken ? `Bearer ${jwtToken}` : '' },
+  });
+  if (res.status === 401 && jwtToken) {
+    forceLogout();
+    throw new Error('Sesión expirada.');
+  }
+  if (!res.ok) {
+    let msg = `Error ${res.status}`;
+    try {
+      const data = JSON.parse(await res.text());
+      msg = data?.message || data?.error || msg;
+    } catch (_) { /* ignore */ }
+    throw new Error(msg);
+  }
+  return res.blob();
 }
 
 function setApiStatus(ok) {
@@ -169,9 +223,10 @@ document.addEventListener('keydown', (e) => {
 /* ─────────────────────────────────────────────────────
    SIDEBAR / NAVIGATION
    ───────────────────────────────────────────────────── */
-const pages = ['dashboard', 'bodegas', 'productos', 'movimientos', 'reportes', 'auditoria', 'usuarios'];
+const pages = ['dashboard', 'ordenes', 'bodegas', 'productos', 'movimientos', 'reportes', 'auditoria', 'usuarios'];
 const pageTitles = {
-  dashboard: ['Dashboard', 'Inicio / Dashboard'],
+  dashboard: ['Dashboard IQ', 'Inicio / Indicadores'],
+  ordenes: ['Órdenes de compra', 'Operación / Órdenes'],
   bodegas: ['Bodegas', 'Inventario / Bodegas'],
   productos: ['Productos', 'Inventario / Productos'],
   movimientos: ['Movimientos', 'Inventario / Movimientos'],
@@ -199,6 +254,7 @@ function navigateTo(page) {
 function loadPage(page) {
   switch (page) {
     case 'dashboard': loadDashboard(); break;
+    case 'ordenes': loadOrdenes(); break;
     case 'bodegas': loadBodegas(); break;
     case 'productos': loadProductos(); break;
     case 'movimientos': loadMovimientos(); break;
@@ -252,6 +308,7 @@ loginForm?.addEventListener('submit', async (e) => {
     const token = data?.token || data?.accessToken || data?.jwt || data;
     if (!token || typeof token !== 'string') throw new Error('Respuesta de login inválida.');
     saveSession(token, username);
+    await resolveCurrentRole();
     setApiStatus(true);
     enterApp();
   } catch (err) {
@@ -287,7 +344,31 @@ function enterApp() {
   if (avatar) avatar.textContent = initials;
   const userLabel = document.getElementById('sidebar-username');
   if (userLabel) userLabel.textContent = currentUser || 'Usuario';
+  applyRoleUi();
   navigateTo('dashboard');
+}
+
+async function resolveCurrentRole() {
+  currentRole = sessionStorage.getItem('logitrack_rol');
+  try {
+    const usuarios = await apiFetch('/api/usuarios');
+    const me = (usuarios || []).find((u) => u.username === currentUser);
+    if (me?.rol) {
+      currentRole = me.rol;
+      sessionStorage.setItem('logitrack_rol', me.rol);
+    }
+  } catch (_) {
+    /* AGENTE/ADMIN: si no hay listado, se conserva el rol ya guardado */
+  }
+  applyRoleUi();
+}
+
+function applyRoleUi() {
+  const roleEl = document.getElementById('sidebar-role');
+  if (roleEl) roleEl.textContent = currentRole || '—';
+  document.querySelectorAll('.admin-only').forEach((el) => {
+    el.classList.toggle('hidden', !isAdmin());
+  });
 }
 
 document.getElementById('logout-btn')?.addEventListener('click', () => {
@@ -300,27 +381,259 @@ document.getElementById('logout-btn')?.addEventListener('click', () => {
 });
 
 /* ─────────────────────────────────────────────────────
-   DASHBOARD
+   DASHBOARD IQ
    ───────────────────────────────────────────────────── */
 async function loadDashboard() {
   try {
-    const [bodegas, productos, movimientos, stockBajo] = await Promise.allSettled([
+    const [kpisR, resumenR, riesgoR, ordenesR, bodegasR] = await Promise.allSettled([
+      apiFetch('/api/kpis'),
+      apiFetchOptional('/api/panel/resumen'),
+      apiFetch('/api/productos/riesgo'),
+      apiFetch('/api/ordenes?estado=BORRADOR'),
       apiFetch('/api/bodegas'),
-      apiFetch('/api/productos'),
-      apiFetch('/api/movimientos'),
-      apiFetch('/api/productos/stock-bajo'),
     ]);
-    animateCount('count-bodegas', bodegas.status === 'fulfilled' ? (bodegas.value?.length ?? '—') : '—');
-    animateCount('count-productos', productos.status === 'fulfilled' ? (productos.value?.length ?? '—') : '—');
-    animateCount('count-movimientos', movimientos.status === 'fulfilled' ? (movimientos.value?.length ?? '—') : '—');
-    animateCount('count-stockbajo', stockBajo.status === 'fulfilled' ? (stockBajo.value?.length ?? '—') : '—');
-    if (movimientos.status === 'fulfilled') renderRecentMovimientos(movimientos.value || []);
-    if (stockBajo.status === 'fulfilled') renderLowStock(stockBajo.value || []);
+    if (bodegasR.status === 'fulfilled') bodegasCache = bodegasR.value || [];
+    if (kpisR.status === 'fulfilled') renderKpis(kpisR.value);
+    else showToast(kpisR.reason?.message || 'No se pudieron cargar los KPIs', 'error');
+    renderPanelResumen(resumenR.status === 'fulfilled' ? resumenR.value : null);
+    renderRiesgo(riesgoR.status === 'fulfilled' ? riesgoR.value || [] : []);
+    const borradores = ordenesR.status === 'fulfilled' ? ordenesR.value || [] : [];
+    renderOrdenesTabla('tbody-ordenes-borrador', borradores, true);
     setApiStatus(true);
   } catch (e) {
     setApiStatus(false);
+    showToast(e.message, 'error');
   }
 }
+
+function renderKpis(kpis) {
+  if (!kpis) return;
+  const ocupacion = kpis.ocupacionPorBodega || [];
+  const maxPct = ocupacion.reduce((m, b) => Math.max(m, Number(b.porcentaje) || 0), 0);
+  const ocupacionEl = document.getElementById('kpi-ocupacion');
+  if (ocupacionEl) ocupacionEl.textContent = ocupacion.length ? `${maxPct.toFixed(1)}%` : '—';
+  animateCount('kpi-quiebre', kpis.productosEnQuiebre ?? '—');
+  animateCount('kpi-riesgo', kpis.productosEnRiesgo ?? '—');
+  const cant = kpis.ordenesPorAprobar?.cantidad ?? 0;
+  animateCount('kpi-ordenes-cant', cant);
+  const montoEl = document.getElementById('kpi-ordenes-monto');
+  if (montoEl) montoEl.textContent = 'Monto total ' + formatCurrency(kpis.ordenesPorAprobar?.montoTotal);
+  const calc = document.getElementById('kpi-calculado');
+  if (calc) calc.textContent = 'Calculado en ' + formatDate(kpis.calculadoEn) + ' · America/Bogota';
+
+  const list = document.getElementById('kpi-ocupacion-list');
+  if (list) {
+    if (!ocupacion.length) {
+      list.innerHTML = '<p class="empty-hint">Sin bodegas</p>';
+    } else {
+      list.innerHTML = ocupacion.map((b) => {
+        const pct = Number(b.porcentaje) || 0;
+        const crit = pct >= 90;
+        return `<div class="ocupacion-row">
+          <div class="ocupacion-head"><strong>${escapeHtml(b.nombre)}</strong><span>${pct.toFixed(1)}%</span></div>
+          <div class="ocupacion-bar"><span class="${crit ? 'critica' : ''}" style="width:${Math.min(pct, 100)}%"></span></div>
+        </div>`;
+      }).join('');
+    }
+  }
+  const ayer = kpis.movimientosAyer || {};
+  setText('ayer-entrada', ayer.entrada ?? 0);
+  setText('ayer-salida', ayer.salida ?? 0);
+  setText('ayer-transferencia', ayer.transferencia ?? 0);
+}
+
+function setText(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = value;
+}
+
+function renderPanelResumen(resumen) {
+  const body = document.getElementById('panel-resumen-body');
+  const fechaEl = document.getElementById('panel-fecha');
+  if (!body) return;
+  if (!resumen) {
+    if (fechaEl) fechaEl.textContent = 'Sin publicar';
+    body.innerHTML = '<p class="empty-hint">Aún no hay un resumen válido del panel.</p>';
+    return;
+  }
+  if (fechaEl) fechaEl.textContent = resumen.fecha || '—';
+  const alertas = resumen.alertas || [];
+  const acciones = resumen.accionesSugeridas || [];
+  body.innerHTML = `
+    <p class="narrativa">${escapeHtml(resumen.narrativa)}</p>
+    <h4 class="iq-subtitle">Alertas</h4>
+    ${alertas.length ? alertas.map((a) => `
+      <article class="alerta-card sev-${escapeHtml(a.severidad)}">
+        <span class="badge badge-sev">${escapeHtml(a.severidad)}</span>
+        <strong>${escapeHtml(a.titulo)}</strong>
+        <p>${escapeHtml(a.detalle)}</p>
+        <small>producto ${a.productoId ?? '—'} · orden ${a.ordenId ?? '—'} · bodega ${a.bodegaId ?? '—'}</small>
+      </article>`).join('') : '<p class="empty-hint">Sin alertas</p>'}
+    <h4 class="iq-subtitle">Acciones sugeridas</h4>
+    ${acciones.length ? `<ul class="acciones-list">${acciones.map((ac) => `
+      <li><span class="badge">${escapeHtml(ac.tipo)}</span> ${escapeHtml(ac.descripcion)}</li>`).join('')}</ul>` : '<p class="empty-hint">Sin acciones</p>'}
+  `;
+}
+
+function nombreBodega(id) {
+  const b = bodegasCache.find((x) => x.id === id);
+  return b ? b.nombre : (id != null ? `#${id}` : '—');
+}
+
+function renderRiesgo(filas) {
+  const tbody = document.getElementById('tbody-riesgo');
+  if (!tbody) return;
+  if (!filas.length) {
+    tbody.innerHTML = '<tr><td colspan="7"><div class="table-loading">No hay productos en riesgo</div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = filas.map((f) => `
+    <tr>
+      <td>${escapeHtml(f.nombreProducto)} <small class="muted">#${f.productoId}</small></td>
+      <td>${f.stockTotal}</td>
+      <td>${Number(f.consumoDiarioPromedio).toFixed(2)}</td>
+      <td>${Number(f.puntoReorden).toFixed(2)}</td>
+      <td>${f.diasCobertura == null ? '—' : Number(f.diasCobertura).toFixed(1)}</td>
+      <td><span class="badge">${escapeHtml(f.estadoCobertura)}</span></td>
+      <td>${escapeHtml(nombreBodega(f.bodegaDestinoId))}</td>
+    </tr>`).join('');
+}
+
+function etiquetaOrden(o) {
+  return {
+    id: o.id,
+    estado: o.estado,
+    producto: o.producto?.nombre || o.productoId || '—',
+    proveedor: o.proveedor?.nombre || '—',
+    cantidad: o.cantidad,
+    total: o.total,
+    bodega: o.bodegaDestino?.nombre || '—',
+    fecha: o.fechaCreacion,
+    tienePdf: Boolean(o.fechaGeneracionPdf),
+  };
+}
+
+function botonesPdf(o) {
+  return `<div class="actions-cell">
+    <button class="btn btn-outline btn-sm" onclick="generarPdfOrden(${o.id})">Generar PDF</button>
+    <button class="btn btn-ghost btn-sm" onclick="verPdfOrden(${o.id})">Ver</button>
+  </div>`;
+}
+
+function botonesEstado(o) {
+  if (!isAdmin()) return '<span class="muted">—</span>';
+  const parts = [];
+  if (o.estado === 'BORRADOR') {
+    parts.push(`<button class="btn btn-primary btn-sm btn-aprobar" onclick="cambiarEstadoOrden(${o.id}, 'APROBADA')">Aprobar</button>`);
+  }
+  if (o.estado === 'APROBADA') {
+    parts.push(`<button class="btn btn-outline btn-sm" onclick="cambiarEstadoOrden(${o.id}, 'RECIBIDA')">Recibir</button>`);
+  }
+  if (o.estado === 'BORRADOR' || o.estado === 'APROBADA') {
+    parts.push(`<button class="btn btn-ghost btn-sm" onclick="cambiarEstadoOrden(${o.id}, 'CANCELADA')">Cancelar</button>`);
+  }
+  return parts.length ? `<div class="actions-cell">${parts.join('')}</div>` : '<span class="muted">—</span>';
+}
+
+function renderOrdenesTabla(tbodyId, ordenes, compacto) {
+  const tbody = document.getElementById(tbodyId);
+  if (!tbody) return;
+  if (!ordenes.length) {
+    const cols = compacto ? 8 : 10;
+    tbody.innerHTML = `<tr><td colspan="${cols}"><div class="table-loading">No hay órdenes</div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = ordenes.map((raw) => {
+    const o = etiquetaOrden(raw);
+    if (compacto) {
+      return `<tr>
+        <td>#${o.id}</td>
+        <td>${escapeHtml(o.producto)}</td>
+        <td>${escapeHtml(o.proveedor)}</td>
+        <td>${o.cantidad}</td>
+        <td>${formatCurrency(o.total)}</td>
+        <td>${escapeHtml(o.bodega)}</td>
+        <td>${botonesPdf(o)}</td>
+        <td>${botonesEstado(raw)}</td>
+      </tr>`;
+    }
+    return `<tr>
+      <td>#${o.id}</td>
+      <td><span class="badge badge-estado-${o.estado}">${escapeHtml(o.estado)}</span></td>
+      <td>${escapeHtml(o.producto)}</td>
+      <td>${escapeHtml(o.proveedor)}</td>
+      <td>${o.cantidad}</td>
+      <td>${formatCurrency(o.total)}</td>
+      <td>${escapeHtml(o.bodega)}</td>
+      <td>${formatDate(o.fecha)}</td>
+      <td>${botonesPdf(o)}</td>
+      <td>${botonesEstado(raw)}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function loadOrdenes() {
+  try {
+    bodegasCache = await apiFetch('/api/bodegas') || bodegasCache;
+    const estado = document.getElementById('filter-estado-orden')?.value;
+    const path = estado ? `/api/ordenes?estado=${encodeURIComponent(estado)}` : '/api/ordenes';
+    ordenesCache = await apiFetch(path) || [];
+    renderOrdenesTabla('tbody-ordenes', ordenesCache, false);
+    setApiStatus(true);
+  } catch (e) {
+    showTableError('tbody-ordenes', 10, e.message);
+    setApiStatus(false);
+  }
+}
+
+async function cambiarEstadoOrden(id, estado) {
+  if (!isAdmin()) {
+    showToast('Solo un ADMIN puede cambiar el estado de una orden.', 'error');
+    return;
+  }
+  try {
+    await apiFetch(`/api/ordenes/${id}/estado`, {
+      method: 'PATCH',
+      body: JSON.stringify({ estado }),
+    });
+    showToast(`Orden #${id} → ${estado}`, 'success');
+    await loadDashboard();
+    if (document.getElementById('page-ordenes')?.classList.contains('active')) {
+      await loadOrdenes();
+    }
+  } catch (e) {
+    showToast(e.message, 'error');
+  }
+}
+
+async function generarPdfOrden(id) {
+  try {
+    const blob = await apiFetchBlob(`/api/ordenes/${id}/pdf`, { method: 'POST' });
+    abrirPdfBlob(blob);
+    showToast('PDF generado. Si la orden está en BORRADOR verá la marca de agua.', 'success');
+    if (document.getElementById('page-ordenes')?.classList.contains('active')) await loadOrdenes();
+    else await loadDashboard();
+  } catch (e) {
+    showToast(e.message, 'error');
+  }
+}
+
+async function verPdfOrden(id) {
+  try {
+    const blob = await apiFetchBlob(`/api/ordenes/${id}/pdf`);
+    abrirPdfBlob(blob);
+  } catch (e) {
+    showToast(e.message + ' — genera el PDF primero.', 'error');
+  }
+}
+
+function abrirPdfBlob(blob) {
+  const url = URL.createObjectURL(blob);
+  window.open(url, '_blank', 'noopener');
+}
+
+document.getElementById('filter-estado-orden')?.addEventListener('change', () => loadOrdenes());
+document.getElementById('btn-refresh-ordenes')?.addEventListener('click', () => loadOrdenes());
 
 function animateCount(id, target) {
   const el = document.getElementById(id);
@@ -1032,7 +1345,7 @@ function renderUsuariosTable(data) {
           ${escapeHtml(u.username)}
         </div>
       </td>
-      <td><span class="badge ${u.rol === 'ADMIN' ? 'badge-admin' : 'badge-empleado'}">${u.rol}</span></td>
+      <td><span class="badge ${u.rol === 'ADMIN' ? 'badge-admin' : u.rol === 'AGENTE' ? 'badge-agente' : 'badge-empleado'}">${u.rol}</span></td>
       <td>
         <div class="actions-cell">
           <button class="btn-icon" onclick="editUsuario(${u.id})" title="Editar">
@@ -1162,11 +1475,19 @@ function showTableError(tbodyId, cols, msg) {
    INIT — Restaurar sesión desde sessionStorage
    ───────────────────────────────────────────────────── */
 (function init() {
+  try {
+    localStorage.removeItem('logitrack_token');
+    localStorage.removeItem('token');
+    localStorage.removeItem('jwt');
+  } catch (_) { /* ignore */ }
   const saved = sessionStorage.getItem('logitrack_token');
   const savedUser = sessionStorage.getItem('logitrack_user');
+  const savedRol = sessionStorage.getItem('logitrack_rol');
   if (saved) {
     jwtToken = saved;
     currentUser = savedUser || 'Usuario';
+    currentRole = savedRol;
     enterApp();
+    resolveCurrentRole();
   }
 })();

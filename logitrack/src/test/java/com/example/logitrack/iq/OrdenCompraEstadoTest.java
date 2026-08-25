@@ -8,6 +8,7 @@ import com.example.logitrack.model.Producto;
 import com.example.logitrack.model.Proveedor;
 import com.example.logitrack.model.Rol;
 import com.example.logitrack.model.Usuario;
+import com.example.logitrack.repository.AuditoriaRepository;
 import com.example.logitrack.repository.BodegaRepository;
 import com.example.logitrack.repository.OrdenCompraRepository;
 import com.example.logitrack.repository.ProductoRepository;
@@ -15,6 +16,7 @@ import com.example.logitrack.repository.ProveedorRepository;
 import com.example.logitrack.repository.ResumenPanelRepository;
 import com.example.logitrack.repository.UsuarioRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.lowagie.text.pdf.PdfReader;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,9 +27,14 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
@@ -59,9 +66,13 @@ class OrdenCompraEstadoTest {
     private ResumenPanelRepository resumenPanelRepository;
 
     @Autowired
+    private AuditoriaRepository auditoriaRepository;
+
+    @Autowired
     private PasswordEncoder passwordEncoder;
 
     private Long ordenCanceladaId;
+    private Long ordenBorradorId;
 
     @BeforeEach
     void prepararDatos() {
@@ -70,6 +81,7 @@ class OrdenCompraEstadoTest {
                 .build();
         ordenCompraRepository.deleteAll();
         resumenPanelRepository.deleteAll();
+        auditoriaRepository.deleteAll();
         productoRepository.deleteAll();
         bodegaRepository.deleteAll();
         proveedorRepository.deleteAll();
@@ -117,6 +129,18 @@ class OrdenCompraEstadoTest {
                 .creadoPor(admin)
                 .build();
         ordenCanceladaId = ordenCompraRepository.save(orden).getId();
+
+        OrdenCompra borrador = OrdenCompra.builder()
+                .producto(producto)
+                .proveedor(proveedor)
+                .bodegaDestino(bodega)
+                .cantidad(8)
+                .precioUnitario(1000.0)
+                .total(8000.0)
+                .estado(EstadoOrdenCompra.BORRADOR)
+                .creadoPor(admin)
+                .build();
+        ordenBorradorId = ordenCompraRepository.save(borrador).getId();
     }
 
     @Test
@@ -139,6 +163,58 @@ class OrdenCompraEstadoTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"estado\":\"APROBADA\"}"))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void pdfBorrador_watermarkYSeInvalidaAlCambiarEstado() throws Exception {
+        String token = tokenDe("admin-iq", "admin123");
+
+        mockMvc.perform(get("/api/ordenes/{id}/pdf", ordenBorradorId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isNotFound());
+
+        byte[] pdf = mockMvc.perform(post("/api/ordenes/{id}/pdf", ordenBorradorId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_PDF))
+                .andReturn()
+                .getResponse()
+                .getContentAsByteArray();
+
+        String contenido = contenidoDePagina(pdf);
+        assertTrue(new String(pdf, java.nio.charset.StandardCharsets.ISO_8859_1).startsWith("%PDF"));
+        assertTrue(contenido.contains("BORRADOR"));
+        assertTrue(contenido.contains("45"));
+        assertNotNull(ordenCompraRepository.findById(ordenBorradorId).orElseThrow().getPdf());
+        assertNotNull(ordenCompraRepository.findById(ordenBorradorId).orElseThrow().getFechaGeneracionPdf());
+
+        mockMvc.perform(get("/api/ordenes/{id}/pdf", ordenBorradorId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_PDF));
+
+        mockMvc.perform(patch("/api/ordenes/{id}/estado", ordenBorradorId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"estado\":\"APROBADA\"}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/ordenes/{id}/pdf", ordenBorradorId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isNotFound());
+
+        OrdenCompra actualizada = ordenCompraRepository.findById(ordenBorradorId).orElseThrow();
+        assertNull(actualizada.getPdf());
+        assertNull(actualizada.getFechaGeneracionPdf());
+    }
+
+    private String contenidoDePagina(byte[] pdf) throws Exception {
+        PdfReader reader = new PdfReader(pdf);
+        try {
+            return new String(reader.getPageContent(1), java.nio.charset.StandardCharsets.ISO_8859_1);
+        } finally {
+            reader.close();
+        }
     }
 
     private String tokenDe(String username, String password) throws Exception {

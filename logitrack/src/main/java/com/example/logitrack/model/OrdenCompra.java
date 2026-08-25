@@ -1,5 +1,6 @@
 package com.example.logitrack.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
@@ -60,6 +61,8 @@ public class OrdenCompra {
     @JoinColumn(name = "creado_por_id", nullable = false)
     private Usuario creadoPor;
 
+    @JsonIgnore
+    @Lob
     @Column(name = "pdf")
     private byte[] pdf;
 

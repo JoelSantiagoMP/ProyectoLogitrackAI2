@@ -899,6 +899,67 @@ img { max-width: 100%; }
   to   { opacity: 0; transform: translateX(30px); }
 }
 
+.stat-sub {
+  font-size: 0.72rem;
+  color: var(--clr-txt-secondary);
+  margin-top: 0.2rem;
+}
+.iq-meta { color: var(--clr-txt-muted); font-size: 0.8rem; margin-bottom: 0.85rem; }
+.mt-card { margin-top: 1rem; }
+.muted { color: var(--clr-txt-muted); font-size: 0.8rem; }
+.empty-hint { color: var(--clr-txt-muted); font-size: 0.85rem; text-align: center; padding: 0.5rem 0; }
+.movimientos-ayer {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+}
+.ayer-chip {
+  background: var(--clr-bg);
+  border: 1px solid var(--clr-border);
+  border-radius: var(--radius-md);
+  padding: 0.9rem 0.75rem;
+  text-align: center;
+}
+.ayer-chip span { display: block; font-size: 1.4rem; font-weight: 700; }
+.ayer-chip small { color: var(--clr-txt-muted); }
+.ocupacion-row { margin-bottom: 0.85rem; }
+.ocupacion-head { display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 0.35rem; }
+.ocupacion-bar {
+  height: 8px;
+  background: var(--clr-border);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+.ocupacion-bar span {
+  display: block;
+  height: 100%;
+  background: var(--clr-blue);
+  border-radius: var(--radius-full);
+}
+.ocupacion-bar span.critica { background: var(--clr-red); }
+.narrativa { margin-bottom: 1rem; line-height: 1.55; }
+.iq-subtitle { font-size: 0.8rem; margin: 0.85rem 0 0.45rem; color: var(--clr-txt-secondary); }
+.alerta-card {
+  border: 1px solid var(--clr-border);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 0.9rem;
+  margin-bottom: 0.5rem;
+  background: var(--clr-bg);
+}
+.alerta-card p { margin: 0.35rem 0; font-size: 0.85rem; }
+.alerta-card.sev-ALTA { border-color: #fca5a5; background: var(--clr-red-bg); }
+.alerta-card.sev-MEDIA { border-color: #fde68a; background: var(--clr-amber-bg); }
+.alerta-card.sev-BAJA { border-color: #bbf7d0; background: var(--clr-green-bg); }
+.badge-sev { margin-right: 0.4rem; font-size: 0.7rem; padding: 0.1rem 0.4rem; border-radius: var(--radius-full); background: #fff; }
+.acciones-list { list-style: none; display: flex; flex-direction: column; gap: 0.4rem; }
+.acciones-list li { font-size: 0.85rem; }
+.badge-estado-BORRADOR { background: var(--clr-amber-bg); color: #b45309; }
+.badge-estado-APROBADA { background: var(--clr-blue-bg); color: #1d4ed8; }
+.badge-estado-RECIBIDA { background: var(--clr-green-bg); color: #15803d; }
+.badge-estado-CANCELADA { background: var(--clr-red-bg); color: #b91c1c; }
+.badge-agente { background: #f5f3ff; color: #6d28d9; border: 1px solid #ddd6fe; }
+.btn-aprobar { white-space: nowrap; }
+
 /* =============================================
    RESPONSIVE
    ============================================= */

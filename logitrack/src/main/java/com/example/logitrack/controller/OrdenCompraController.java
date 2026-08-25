@@ -6,7 +6,9 @@ import com.example.logitrack.model.EstadoOrdenCompra;
 import com.example.logitrack.model.OrdenCompra;
 import com.example.logitrack.service.OrdenCompraService;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
@@ -39,6 +41,23 @@ public class OrdenCompraController {
             Authentication authentication) {
         String username = authentication.getName();
         return new ResponseEntity<>(ordenCompraService.crear(request, username), HttpStatus.CREATED);
+    }
+
+    @PostMapping("/{id}/pdf")
+    public ResponseEntity<byte[]> generarPdf(@PathVariable Long id) {
+        return pdfResponse(id, ordenCompraService.generarPdf(id));
+    }
+
+    @GetMapping("/{id}/pdf")
+    public ResponseEntity<byte[]> obtenerPdf(@PathVariable Long id) {
+        return pdfResponse(id, ordenCompraService.obtenerPdf(id));
+    }
+
+    private ResponseEntity<byte[]> pdfResponse(Long id, byte[] pdf) {
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"orden-" + id + ".pdf\"")
+                .body(pdf);
     }
 
     @PatchMapping("/{id}/estado")

@@ -22,6 +22,8 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -35,6 +37,7 @@ public class OrdenCompraService {
     private final UsuarioRepository usuarioRepository;
     private final MovimientoService movimientoService;
     private final AuditoriaService auditoriaService;
+    private final OrdenPdfService ordenPdfService;
 
     public OrdenCompraService(OrdenCompraRepository ordenCompraRepository,
             ProductoRepository productoRepository,
@@ -42,7 +45,8 @@ public class OrdenCompraService {
             BodegaRepository bodegaRepository,
             UsuarioRepository usuarioRepository,
             MovimientoService movimientoService,
-            AuditoriaService auditoriaService) {
+            AuditoriaService auditoriaService,
+            OrdenPdfService ordenPdfService) {
         this.ordenCompraRepository = ordenCompraRepository;
         this.productoRepository = productoRepository;
         this.proveedorRepository = proveedorRepository;
@@ -50,6 +54,7 @@ public class OrdenCompraService {
         this.usuarioRepository = usuarioRepository;
         this.movimientoService = movimientoService;
         this.auditoriaService = auditoriaService;
+        this.ordenPdfService = ordenPdfService;
     }
 
     @Transactional(readOnly = true)
@@ -95,6 +100,25 @@ public class OrdenCompraService {
         auditoriaService.registrarAuditoria(TipoOperacion.INSERT, autor, "OrdenCompra", guardada.getId(),
                 null, "BORRADOR total=" + total);
         return guardada;
+    }
+
+    @Transactional
+    public byte[] generarPdf(Long id) {
+        OrdenCompra orden = obtenerPorId(id);
+        byte[] pdf = ordenPdfService.generar(orden);
+        orden.setPdf(pdf);
+        orden.setFechaGeneracionPdf(LocalDateTime.now(ZoneId.of("America/Bogota")));
+        ordenCompraRepository.save(orden);
+        return pdf;
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] obtenerPdf(Long id) {
+        OrdenCompra orden = obtenerPorId(id);
+        if (orden.getPdf() == null || orden.getPdf().length == 0) {
+            throw new ResourceNotFoundException("La orden " + id + " aún no tiene PDF generado");
+        }
+        return orden.getPdf();
     }
 
     @Transactional

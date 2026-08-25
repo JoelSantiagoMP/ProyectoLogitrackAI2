@@ -1,0 +1,118 @@
+{
+  "name": "Resumen diario de inventario",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 6 * * *"
+            }
+          ]
+        }
+      },
+      "id": "1a2b3c4d-1111-4000-8000-cron0600bogota",
+      "name": "Cron 06:00 America/Bogota",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Ejecuta ahora el resumen diario de inventario de LogiTrack.\nFecha actual en America/Bogota: {{$now.setZone('America/Bogota').toFormat('yyyy-MM-dd')}}.\nSigue estrictamente las reglas de la skill de operación (system message).\nAl terminar, indica éxito (herramientas usadas, orden creada o no, resumen publicado) o el error exacto si una herramienta falló.",
+        "options": {
+          "systemMessage": "Eres el Agente de operación LogiTrack. Usas SOLO las herramientas MCP conectadas. No inventes datos.\n\nOrden obligatorio:\n1) consultar_productos_en_riesgo y consultar_kpis primero.\n2) Opcional: consultar_bodegas_criticas y consultar_stock_producto.\n3) Si hay productos en riesgo, crea COMO MÁXIMO UNA orden BORRADOR por ejecución, para el PRIMER producto de la lista. cantidad = ceil(max(1, puntoReorden * 2 - stockTotal)). Usa productoId, proveedorId, bodegaDestinoId de esa fila y un precioUnitario positivo. Llama crear_orden_borrador una sola vez. Si no hay riesgo, no crees orden.\n4) Publica el resumen con publicar_resumen cumpliendo el contrato JSON estricto: fecha YYYY-MM-DD de hoy en America/Bogota; narrativa 20-500 caracteres; alertas con severidad BAJA|MEDIA|ALTA, titulo, detalle, productoId/ordenId/bodegaId (integer o null), al menos un ID no nulo existente; accionesSugeridas con tipo REVISAR_ORDEN|REVISAR_PRODUCTO|REVISAR_BODEGA, descripcion, y exactamente un ID no nulo existente. additionalProperties prohibidas. Si creaste orden, incluye REVISAR_ORDEN con ese ordenId.\n5) PROHIBIDO aprobar, cancelar o recibir órdenes. No existe ni uses herramientas de PATCH/estado/movimientos.\n6) Si alguna herramienta falla, detente, no crees más órdenes e informa el error con el mensaje de la API. Si el fallo es posterior a crear la orden, no intentes otra ni cambiar estado."
+        }
+      },
+      "id": "2b3c4d5e-2222-4000-8000-aiagentlogi",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [520, 300]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o-mini"
+        },
+        "options": {}
+      },
+      "id": "3c4d5e6f-3333-4000-8000-openai-chat",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [400, 520],
+      "credentials": {
+        "openAiApi": {
+          "id": "REEMPLAZAR_OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "endpointUrl": "http://host.docker.internal:3100/mcp",
+        "serverTransport": "httpStreamable",
+        "authentication": "none",
+        "include": "all",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "4d5e6f70-4444-4000-8000-mcp-logitrack",
+      "name": "LogiTrack MCP",
+      "type": "@n8n/n8n-nodes-langchain.mcpClientTool",
+      "typeVersion": 1.2,
+      "position": [640, 520]
+    }
+  ],
+  "connections": {
+    "Cron 06:00 America/Bogota": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LogiTrack MCP": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Bogota"
+  },
+  "pinData": {},
+  "versionId": "fase4-resumen-diario-inventario"
+}
