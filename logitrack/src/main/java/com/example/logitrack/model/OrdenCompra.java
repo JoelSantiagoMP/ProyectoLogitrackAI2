@@ -5,6 +5,8 @@ import jakarta.persistence.*;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 
@@ -62,8 +64,8 @@ public class OrdenCompra {
     private Usuario creadoPor;
 
     @JsonIgnore
-    @Lob
-    @Column(name = "pdf")
+    @JdbcTypeCode(SqlTypes.BINARY)
+    @Column(name = "pdf", columnDefinition = "BYTEA")
     private byte[] pdf;
 
     @Column(name = "fecha_generacion_pdf")
