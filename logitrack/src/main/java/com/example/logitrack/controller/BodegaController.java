@@ -3,6 +3,7 @@ package com.example.logitrack.controller;
 import com.example.logitrack.dto.BodegaDTO;
 import com.example.logitrack.model.Bodega;
 import com.example.logitrack.service.BodegaService;
+import com.example.logitrack.service.IndicadoresInventarioService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -10,20 +11,29 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/bodegas")
 public class BodegaController {
 
     private final BodegaService bodegaService;
+    private final IndicadoresInventarioService indicadoresInventarioService;
 
-    public BodegaController(BodegaService bodegaService) {
+    public BodegaController(BodegaService bodegaService,
+            IndicadoresInventarioService indicadoresInventarioService) {
         this.bodegaService = bodegaService;
+        this.indicadoresInventarioService = indicadoresInventarioService;
     }
 
     @GetMapping
     public ResponseEntity<List<Bodega>> listarBodegas() {
         return ResponseEntity.ok(bodegaService.obtenerTodas());
+    }
+
+    @GetMapping("/criticas")
+    public ResponseEntity<List<Map<String, Object>>> listarBodegasCriticas() {
+        return ResponseEntity.ok(indicadoresInventarioService.listarBodegasCriticas());
     }
 
     @GetMapping("/{id}")

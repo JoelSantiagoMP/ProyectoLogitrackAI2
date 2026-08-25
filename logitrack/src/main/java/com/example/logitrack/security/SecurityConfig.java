@@ -2,6 +2,7 @@ package com.example.logitrack.security;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
@@ -35,13 +36,29 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/", "/auth/**", "/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html",
-                                "/api/bodegas/**", "/api/productos/**")
+                        .requestMatchers("/", "/auth/**", "/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html")
                         .permitAll()
                         .requestMatchers("/api/auth/**").permitAll()
-                        // Rol AGENTE (JWT): CustomUserDetailsService asigna ROLE_AGENTE.
-                        // La matriz IQ (consultar/crear BORRADOR/publicar vs aprobar) se aplica en el ciclo verde.
+                        .requestMatchers(HttpMethod.PATCH, "/api/ordenes/**", "/ordenes/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/movimientos", "/api/movimientos/**")
+                        .hasRole("ADMIN")
+                        .requestMatchers("/api/kpis", "/kpis", "/api/proveedores", "/proveedores",
+                                "/api/ordenes", "/api/ordenes/**", "/ordenes", "/ordenes/**",
+                                "/api/panel/**", "/panel/**")
+                        .hasAnyRole("ADMIN", "AGENTE")
+                        .requestMatchers(HttpMethod.GET, "/api/productos/riesgo", "/api/productos/*/stock",
+                                "/api/bodegas/criticas")
+                        .hasAnyRole("ADMIN", "AGENTE")
+                        .requestMatchers("/api/bodegas/**", "/api/productos/**")
+                        .permitAll()
                         .anyRequest().authenticated())
+                .exceptionHandling(ex -> ex
+                        .accessDeniedHandler((request, response, accessDeniedException) -> {
+                            response.setStatus(403);
+                            response.setContentType("application/json");
+                            response.getWriter().write(
+                                    "{\"status\":403,\"error\":\"Forbidden\",\"message\":\"No tiene permiso para esta acción\"}");
+                        }))
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

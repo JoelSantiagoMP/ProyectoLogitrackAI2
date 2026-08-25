@@ -2,6 +2,7 @@ package com.example.logitrack.controller;
 
 import com.example.logitrack.dto.ProductoRequest;
 import com.example.logitrack.model.Producto;
+import com.example.logitrack.service.IndicadoresInventarioService;
 import com.example.logitrack.service.ProductoService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -17,9 +18,12 @@ import java.util.Map;
 public class ProductoController {
 
     private final ProductoService productoService;
+    private final IndicadoresInventarioService indicadoresInventarioService;
 
-    public ProductoController(ProductoService productoService) {
+    public ProductoController(ProductoService productoService,
+            IndicadoresInventarioService indicadoresInventarioService) {
         this.productoService = productoService;
+        this.indicadoresInventarioService = indicadoresInventarioService;
     }
 
     @GetMapping
@@ -30,6 +34,16 @@ public class ProductoController {
     @GetMapping("/stock-bajo")
     public ResponseEntity<List<Producto>> obtenerProductosStockBajo() {
         return ResponseEntity.ok(productoService.obtenerProductosStockBajo());
+    }
+
+    @GetMapping("/riesgo")
+    public ResponseEntity<List<Map<String, Object>>> listarProductosEnRiesgo() {
+        return ResponseEntity.ok(indicadoresInventarioService.listarProductosEnRiesgo());
+    }
+
+    @GetMapping("/{id}/stock")
+    public ResponseEntity<Map<String, Object>> obtenerStockProducto(@PathVariable Long id) {
+        return ResponseEntity.ok(indicadoresInventarioService.obtenerStockProducto(id));
     }
 
     @GetMapping("/{id}")
