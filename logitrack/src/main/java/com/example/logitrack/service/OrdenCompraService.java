@@ -85,20 +85,20 @@ public class OrdenCompraService {
         Bodega bodega = bodegaRepository.findById(request.getBodegaDestinoId())
                 .orElseThrow(() -> new ResourceNotFoundException("Bodega destino no encontrada"));
 
-        double total = request.getCantidad() * request.getPrecioUnitario();
         OrdenCompra orden = OrdenCompra.builder()
                 .producto(producto)
                 .proveedor(proveedor)
                 .bodegaDestino(bodega)
                 .cantidad(request.getCantidad())
-                .precioUnitario(request.getPrecioUnitario())
-                .total(total)
+                .precioUnitario(0.0)
+                .total(0.0)
                 .estado(EstadoOrdenCompra.BORRADOR)
                 .creadoPor(autor)
                 .build();
+        aplicarPrecioProducto(orden);
         OrdenCompra guardada = ordenCompraRepository.save(orden);
         auditoriaService.registrarAuditoria(TipoOperacion.INSERT, autor, "OrdenCompra", guardada.getId(),
-                null, "BORRADOR total=" + total);
+                null, "BORRADOR total=" + guardada.getTotal());
         return guardada;
     }
 
@@ -141,10 +141,17 @@ public class OrdenCompraService {
                 .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado: " + username));
 
         EstadoOrdenCompra anterior = actual;
+
+        // Aprobar no altera inventario; sí corrige totales legacy mal calculados.
+        if (anterior == EstadoOrdenCompra.BORRADOR && destino == EstadoOrdenCompra.APROBADA) {
+            aplicarPrecioProducto(orden);
+        }
+
         orden.setEstado(destino);
         orden.setPdf(null);
         orden.setFechaGeneracionPdf(null);
 
+        // Solo al recibir se suma stock en la bodega destino (movimiento ENTRADA).
         if (anterior == EstadoOrdenCompra.APROBADA && destino == EstadoOrdenCompra.RECIBIDA) {
             registrarEntradaRecepcion(orden, username);
         }
@@ -165,14 +172,55 @@ public class OrdenCompraService {
         return false;
     }
 
+    private void aplicarPrecioProducto(OrdenCompra orden) {
+        Producto producto = orden.getProducto();
+        Double precioProducto = producto != null ? producto.getPrecio() : null;
+        if (precioProducto == null || precioProducto <= 0) {
+            throw new IllegalArgumentException("El producto no tiene un precio unitario válido.");
+        }
+        if (orden.getCantidad() == null || orden.getCantidad() <= 0) {
+            throw new IllegalArgumentException("La cantidad debe ser mayor que 0.");
+        }
+        orden.setPrecioUnitario(precioProducto);
+        orden.setTotal(orden.getCantidad() * precioProducto);
+    }
+
     private void registrarEntradaRecepcion(OrdenCompra orden, String username) {
+        if (orden.getProducto() == null || orden.getProducto().getId() == null) {
+            throw new IllegalArgumentException("La orden no tiene producto asociado.");
+        }
+        if (orden.getBodegaDestino() == null || orden.getBodegaDestino().getId() == null) {
+            throw new IllegalArgumentException("La orden no tiene bodega destino.");
+        }
+        if (orden.getCantidad() == null || orden.getCantidad() <= 0) {
+            throw new IllegalArgumentException("La cantidad de la orden debe ser mayor que 0.");
+        }
+
+        Long productoId = orden.getProducto().getId();
+        Long bodegaId = orden.getBodegaDestino().getId();
+        int cantidad = orden.getCantidad();
+        int stockAntes = movimientoService.obtenerStockEnBodega(productoId, bodegaId);
+
         Movimiento movimiento = new Movimiento();
         movimiento.setTipoMovimiento(TipoMovimiento.ENTRADA);
-        movimiento.setBodegaDestino(orden.getBodegaDestino());
+        Bodega bodegaRef = new Bodega();
+        bodegaRef.setId(bodegaId);
+        movimiento.setBodegaDestino(bodegaRef);
+
         DetalleMovimiento detalle = new DetalleMovimiento();
-        detalle.setProducto(orden.getProducto());
-        detalle.setCantidad(orden.getCantidad());
+        Producto productoRef = new Producto();
+        productoRef.setId(productoId);
+        detalle.setProducto(productoRef);
+        detalle.setCantidad(cantidad);
         movimiento.setDetalles(new ArrayList<>(List.of(detalle)));
+
         movimientoService.registrarMovimiento(movimiento, username);
+
+        int stockDespues = movimientoService.obtenerStockEnBodega(productoId, bodegaId);
+        if (stockDespues != stockAntes + cantidad) {
+            throw new IllegalStateException(
+                    "La recepción no actualizó el inventario. Stock esperado: "
+                            + (stockAntes + cantidad) + ", actual: " + stockDespues);
+        }
     }
 }

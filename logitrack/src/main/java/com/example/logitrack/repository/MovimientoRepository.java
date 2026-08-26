@@ -27,8 +27,8 @@ public interface MovimientoRepository extends JpaRepository<Movimiento, Long> {
             LEFT JOIN d.producto p
             LEFT JOIN m.bodegaOrigen bo
             LEFT JOIN m.bodegaDestino bd
-            WHERE (:filtrarBodega = false OR LOWER(bo.nombre) = :bodega OR LOWER(bd.nombre) = :bodega)
-              AND (:filtrarProducto = false OR LOWER(p.nombre) = :producto)
+            WHERE (:filtrarBodega = false OR bo.id = :bodegaId OR bd.id = :bodegaId)
+              AND (:filtrarProducto = false OR p.id = :productoId)
               AND (:filtrarTipo = false OR m.tipoMovimiento = :tipoMovimiento)
               AND (:filtrarFechaInicio = false OR m.fecha >= :fechaInicio)
               AND (:filtrarFechaFin = false OR m.fecha <= :fechaFin)
@@ -36,9 +36,9 @@ public interface MovimientoRepository extends JpaRepository<Movimiento, Long> {
             """)
     List<Movimiento> findByFiltrosOpcionales(
             @Param("filtrarBodega") boolean filtrarBodega,
-            @Param("bodega") String bodega,
+            @Param("bodegaId") Long bodegaId,
             @Param("filtrarProducto") boolean filtrarProducto,
-            @Param("producto") String producto,
+            @Param("productoId") Long productoId,
             @Param("filtrarTipo") boolean filtrarTipo,
             @Param("tipoMovimiento") TipoMovimiento tipoMovimiento,
             @Param("filtrarFechaInicio") boolean filtrarFechaInicio,

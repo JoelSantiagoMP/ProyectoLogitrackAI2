@@ -450,6 +450,9 @@
                 </svg>
                 Stock Bajo
               </button>
+              <select id="filter-categoria-producto" class="select-filter" aria-label="Filtrar por categoría">
+                <option value="">Todas las categorías</option>
+              </select>
               <div class="search-box">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
@@ -485,21 +488,70 @@
               </svg>
               Registrar Movimiento
             </button>
-            <div class="filter-group">
-              <select id="filter-tipo-movimiento" class="select-filter">
-                <option value="">Todos los tipos</option>
-                <option value="ENTRADA">Entrada</option>
-                <option value="SALIDA">Salida</option>
-                <option value="TRANSFERENCIA">Transferencia</option>
-              </select>
-              <div class="search-box">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-                </svg>
-                <input type="text" id="search-movimientos" placeholder="Buscar movimientos..." />
+          </div>
+
+          <div class="reportes-filter-panel card card-overflow-visible">
+            <div class="card-body reportes-filter-body">
+              <div class="reportes-filter-grid">
+                <label class="reportes-filter-field">
+                  <span class="reportes-filter-label">Tipo de movimiento</span>
+                  <select id="filter-tipo-movimiento" class="select-filter">
+                    <option value="">Todos los tipos</option>
+                    <option value="ENTRADA">Entrada</option>
+                    <option value="SALIDA">Salida</option>
+                    <option value="TRANSFERENCIA">Transferencia</option>
+                  </select>
+                </label>
+
+                <label class="reportes-filter-field">
+                  <span class="reportes-filter-label">Bodega</span>
+                  <select id="filter-bodega-movimiento" class="select-filter">
+                    <option value="">Todas las bodegas</option>
+                  </select>
+                </label>
+
+                <label class="reportes-filter-field">
+                  <span class="reportes-filter-label">Desde</span>
+                  <div class="clearable-input">
+                    <input type="datetime-local" id="filter-mov-fecha-inicio" class="select-filter input-datetime" />
+                    <button type="button" class="btn-clear-field" data-clear-input="filter-mov-fecha-inicio" aria-label="Limpiar fecha desde" title="Limpiar">×</button>
+                  </div>
+                </label>
+
+                <label class="reportes-filter-field">
+                  <span class="reportes-filter-label">Hasta</span>
+                  <div class="clearable-input">
+                    <input type="datetime-local" id="filter-mov-fecha-fin" class="select-filter input-datetime" />
+                    <button type="button" class="btn-clear-field" data-clear-input="filter-mov-fecha-fin" aria-label="Limpiar fecha hasta" title="Limpiar">×</button>
+                  </div>
+                </label>
+
+                <label class="reportes-filter-field">
+                  <span class="reportes-filter-label">ID de movimiento</span>
+                  <div class="clearable-input">
+                    <input type="number" id="filter-mov-id" class="select-filter input-datetime" min="1" step="1" placeholder="Ej. 42" />
+                    <button type="button" class="btn-clear-field" data-clear-input="filter-mov-id" aria-label="Limpiar ID" title="Limpiar">×</button>
+                  </div>
+                </label>
+
+                <div class="reportes-filter-field">
+                  <span class="reportes-filter-label">Usuario</span>
+                  <div class="autocomplete" id="filter-mov-usuario-ac">
+                    <div class="autocomplete-chip hidden" id="filter-mov-usuario-chip">
+                      <span class="autocomplete-chip-text" id="filter-mov-usuario-chip-text"></span>
+                      <button type="button" class="autocomplete-chip-clear" id="filter-mov-usuario-clear" aria-label="Quitar usuario" title="Quitar">×</button>
+                    </div>
+                    <div class="autocomplete-input-wrap">
+                      <input type="text" id="filter-mov-usuario" class="select-filter input-datetime" placeholder="Escribe para buscar…" autocomplete="off" spellcheck="false" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="filter-mov-usuario-list" />
+                      <ul class="autocomplete-list hidden" id="filter-mov-usuario-list" role="listbox"></ul>
+                    </div>
+                  </div>
+                </div>
               </div>
+              <p id="movimientos-filtro-error" class="reportes-filter-error hidden" role="alert"></p>
             </div>
           </div>
+
           <div class="card">
             <div class="card-body p-0">
               <div class="table-wrapper">
@@ -520,27 +572,83 @@
 
         <!-- ========== REPORTES PAGE ========== -->
         <section id="page-reportes" class="page">
-          <div class="page-actions">
-            <div class="filter-group">
-              <select id="reporte-tipo" class="select-filter">
-                <option value="inventario">Inventario por bodega</option>
-                <option value="movimientos">Movimientos</option>
-                <option value="auditoria">Auditoría</option>
-              </select>
-              <select id="reporte-bodega" class="select-filter">
-                <option value="">Todas las bodegas</option>
-              </select>
-              <select id="reporte-tipo-movimiento" class="select-filter">
-                <option value="">Todos los tipos</option>
-                <option value="ENTRADA">Entrada</option>
-                <option value="SALIDA">Salida</option>
-                <option value="TRANSFERENCIA">Transferencia</option>
-              </select>
-              <input type="text" id="reporte-producto" class="select-filter" placeholder="Producto" />
-              <input type="text" id="reporte-entidad" class="select-filter" placeholder="Entidad (Producto, Bodega...)" />
-              <input type="datetime-local" id="reporte-fecha-inicio" class="select-filter" />
-              <input type="datetime-local" id="reporte-fecha-fin" class="select-filter" />
-              <button class="btn btn-primary" id="btn-generar-reporte">Generar</button>
+          <div class="reportes-filter-panel card">
+            <div class="card-body reportes-filter-body">
+              <div class="reportes-filter-grid">
+                <label class="reportes-filter-field">
+                  <span class="reportes-filter-label">Tipo de reporte</span>
+                  <select id="reporte-tipo" class="select-filter">
+                    <option value="inventario">Inventario por bodega</option>
+                    <option value="movimientos">Movimientos</option>
+                    <option value="auditoria">Auditoría</option>
+                  </select>
+                </label>
+
+                <label class="reportes-filter-field" data-filter="bodega">
+                  <span class="reportes-filter-label">Bodega</span>
+                  <select id="reporte-bodega" class="select-filter">
+                    <option value="">Todas las bodegas</option>
+                  </select>
+                </label>
+
+                <label class="reportes-filter-field" data-filter="producto">
+                  <span class="reportes-filter-label">Producto</span>
+                  <select id="reporte-producto" class="select-filter">
+                    <option value="">Todos los productos</option>
+                  </select>
+                </label>
+
+                <label class="reportes-filter-field" data-filter="categoria">
+                  <span class="reportes-filter-label">Categoría</span>
+                  <select id="reporte-categoria" class="select-filter">
+                    <option value="">Todas las categorías</option>
+                  </select>
+                </label>
+
+                <label class="reportes-filter-field" data-filter="tipo-movimiento">
+                  <span class="reportes-filter-label">Tipo de movimiento</span>
+                  <select id="reporte-tipo-movimiento" class="select-filter">
+                    <option value="">Todos los tipos</option>
+                    <option value="ENTRADA">Entrada</option>
+                    <option value="SALIDA">Salida</option>
+                    <option value="TRANSFERENCIA">Transferencia</option>
+                  </select>
+                </label>
+
+                <label class="reportes-filter-field" data-filter="entidad">
+                  <span class="reportes-filter-label">Entidad</span>
+                  <select id="reporte-entidad" class="select-filter">
+                    <option value="">Todas las entidades</option>
+                    <option value="Producto">Producto</option>
+                    <option value="Bodega">Bodega</option>
+                    <option value="Movimiento">Movimiento</option>
+                    <option value="OrdenCompra">Orden de compra</option>
+                    <option value="Usuario">Usuario</option>
+                    <option value="ResumenPanel">Resumen del panel</option>
+                  </select>
+                </label>
+
+                <label class="reportes-filter-field" data-filter="fechas">
+                  <span class="reportes-filter-label">Desde</span>
+                  <div class="clearable-input">
+                    <input type="datetime-local" id="reporte-fecha-inicio" class="select-filter input-datetime" />
+                    <button type="button" class="btn-clear-field" data-clear-input="reporte-fecha-inicio" aria-label="Limpiar fecha desde" title="Limpiar">×</button>
+                  </div>
+                </label>
+
+                <label class="reportes-filter-field" data-filter="fechas">
+                  <span class="reportes-filter-label">Hasta</span>
+                  <div class="clearable-input">
+                    <input type="datetime-local" id="reporte-fecha-fin" class="select-filter input-datetime" />
+                    <button type="button" class="btn-clear-field" data-clear-input="reporte-fecha-fin" aria-label="Limpiar fecha hasta" title="Limpiar">×</button>
+                  </div>
+                </label>
+
+                <div class="reportes-filter-actions">
+                  <button type="button" class="btn btn-primary" id="btn-generar-reporte">Generar reporte</button>
+                </div>
+              </div>
+              <p id="reporte-filtro-error" class="reportes-filter-error hidden" role="alert"></p>
             </div>
           </div>
           <div class="card">
@@ -604,11 +712,19 @@
               </svg>
               Nuevo Usuario
             </button>
-            <div class="search-box">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-              </svg>
-              <input type="text" id="search-usuarios" placeholder="Buscar usuarios..." />
+            <div class="filter-group">
+              <select id="filter-rol-usuario" class="select-filter" aria-label="Filtrar por rol">
+                <option value="">Todos los roles</option>
+                <option value="ADMIN">Admin</option>
+                <option value="EMPLEADO">Empleado</option>
+                <option value="AGENTE">Agente</option>
+              </select>
+              <div class="search-box">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+                </svg>
+                <input type="text" id="search-usuarios" placeholder="Buscar usuarios..." />
+              </div>
             </div>
           </div>
           <div class="card">

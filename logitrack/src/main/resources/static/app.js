@@ -680,6 +680,9 @@ async function cambiarEstadoOrden(id, estado) {
     if (document.getElementById('page-ordenes')?.classList.contains('active')) {
       await loadOrdenes();
     }
+    if (estado === 'RECIBIDA' && document.getElementById('page-productos')?.classList.contains('active')) {
+      await loadProductos();
+    }
   } catch (e) {
     showToast(e.message, 'error');
   }
@@ -877,10 +880,46 @@ document.getElementById('form-bodega')?.addEventListener('submit', async (e) => 
 let productosData = [];
 let showingLowStock = false;
 
+function populateFiltroCategoriasProducto() {
+  const select = document.getElementById('filter-categoria-producto');
+  if (!select) return;
+  const current = select.value;
+  const categorias = [...new Set(productosData.map((p) => p.categoria).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'es'));
+  fillSelectOptions(
+    select,
+    categorias,
+    'Todas las categorías',
+    (c) => `<option value="${escapeAttr(c)}">${escapeHtml(c)}</option>`
+  );
+  if (current && [...select.options].some((o) => o.value === current)) {
+    select.value = current;
+  }
+}
+
+function aplicarFiltrosProductos() {
+  const q = (document.getElementById('search-productos')?.value || '').toLowerCase().trim();
+  const categoria = document.getElementById('filter-categoria-producto')?.value || '';
+  let data = showingLowStock
+    ? productosData.filter((p) => (p.stock ?? 0) < 10)
+    : productosData.slice();
+  if (categoria) {
+    data = data.filter((p) => (p.categoria || '') === categoria);
+  }
+  if (q) {
+    data = data.filter((p) =>
+      (p.nombre || '').toLowerCase().includes(q) ||
+      (p.categoria || '').toLowerCase().includes(q)
+    );
+  }
+  renderProductosTable(data, Boolean(q || categoria || showingLowStock));
+}
+
 async function loadProductos() {
   try {
     productosData = await apiFetch('/api/productos') || [];
-    renderProductosTable(productosData);
+    populateFiltroCategoriasProducto();
+    aplicarFiltrosProductos();
     setApiStatus(true);
   } catch (e) {
     showTableError('tbody-productos', isAdmin() ? 6 : 5, e.message);
@@ -888,11 +927,15 @@ async function loadProductos() {
   }
 }
 
-function renderProductosTable(data) {
+function renderProductosTable(data, filtrosActivos = false) {
   const tbody = document.getElementById('tbody-productos');
   if (!tbody) return;
   const cols = isAdmin() ? 6 : 5;
-  if (!data.length) { tbody.innerHTML = `<tr><td colspan="${cols}"><div class="table-loading">No hay productos registrados</div></td></tr>`; return; }
+  if (!data.length) {
+    const msg = filtrosActivos ? 'No se encontraron productos' : 'No hay productos registrados';
+    tbody.innerHTML = `<tr><td colspan="${cols}"><div class="table-loading">${msg}</div></td></tr>`;
+    return;
+  }
   tbody.innerHTML = data.map(p => `
     <tr>
       <td><span style="font-weight:600;color:var(--clr-txt-muted)">#${p.id}</span></td>
@@ -914,14 +957,8 @@ function renderProductosTable(data) {
   `).join('');
 }
 
-document.getElementById('search-productos')?.addEventListener('input', (e) => {
-  const q = e.target.value.toLowerCase();
-  const base = showingLowStock ? productosData.filter(p => p.stock < 10) : productosData;
-  renderProductosTable(base.filter(p =>
-    p.nombre.toLowerCase().includes(q) ||
-    p.categoria.toLowerCase().includes(q)
-  ));
-});
+document.getElementById('search-productos')?.addEventListener('input', aplicarFiltrosProductos);
+document.getElementById('filter-categoria-producto')?.addEventListener('change', aplicarFiltrosProductos);
 
 document.getElementById('btn-stock-bajo')?.addEventListener('click', async () => {
   showingLowStock = !showingLowStock;
@@ -931,13 +968,14 @@ document.getElementById('btn-stock-bajo')?.addEventListener('click', async () =>
     btn.classList.remove('btn-outline');
     try {
       const data = await apiFetch('/api/productos/stock-bajo');
-      renderProductosTable(data || []);
+      const byId = new Map((data || []).map((p) => [p.id, p]));
+      productosData = productosData.map((p) => byId.has(p.id) ? { ...p, ...byId.get(p.id) } : p);
     } catch (e) { showToast(e.message, 'error'); }
   } else {
     btn.classList.remove('btn-primary');
     btn.classList.add('btn-outline');
-    renderProductosTable(productosData);
   }
+  aplicarFiltrosProductos();
 });
 
 document.getElementById('btn-nuevo-producto')?.addEventListener('click', async () => {
@@ -1059,11 +1097,226 @@ document.getElementById('form-producto')?.addEventListener('submit', async (e) =
    MOVIMIENTOS
    ───────────────────────────────────────────────────── */
 let movimientosData = [];
+let usuariosFiltroCache = [];
+let movimientoUsuarioSeleccionado = null;
+
+function setMovimientosFiltroError(message) {
+  const el = document.getElementById('movimientos-filtro-error');
+  if (!el) return;
+  if (!message) {
+    el.textContent = '';
+    el.classList.add('hidden');
+    return;
+  }
+  el.textContent = message;
+  el.classList.remove('hidden');
+}
+
+function syncClearableInput(input) {
+  if (!input) return;
+  const wrap = input.closest('.clearable-input');
+  if (!wrap) return;
+  wrap.classList.toggle('has-value', Boolean(input.value));
+}
+
+function bindClearableInputs(onCleared) {
+  document.querySelectorAll('[data-clear-input]').forEach((btn) => {
+    if (btn.dataset.boundClear === '1') return;
+    btn.dataset.boundClear = '1';
+    const inputId = btn.getAttribute('data-clear-input');
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    syncClearableInput(input);
+    input.addEventListener('input', () => syncClearableInput(input));
+    input.addEventListener('change', () => syncClearableInput(input));
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      input.value = '';
+      syncClearableInput(input);
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      if (typeof onCleared === 'function') onCleared(inputId, input);
+    });
+  });
+}
+
+function collectUsernamesForAutocomplete() {
+  const fromMovimientos = movimientosData
+    .map((m) => m.usuario?.username || (typeof m.usuario === 'string' ? m.usuario : null))
+    .filter(Boolean);
+  const fromUsuarios = usuariosFiltroCache.map((u) => u.username).filter(Boolean);
+  return [...new Set([...fromUsuarios, ...fromMovimientos])]
+    .sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
+}
+
+function filterUsernamesPredictive(query) {
+  const q = (query || '').trim().toLowerCase();
+  if (!q) return [];
+  const all = collectUsernamesForAutocomplete();
+  const starts = [];
+  const contains = [];
+  for (const name of all) {
+    const lower = name.toLowerCase();
+    if (lower.startsWith(q)) starts.push(name);
+    else if (lower.includes(q)) contains.push(name);
+  }
+  return [...starts, ...contains].slice(0, 8);
+}
+
+function setMovimientoUsuarioSeleccionado(username) {
+  movimientoUsuarioSeleccionado = username || null;
+  const root = document.getElementById('filter-mov-usuario-ac');
+  const chip = document.getElementById('filter-mov-usuario-chip');
+  const chipText = document.getElementById('filter-mov-usuario-chip-text');
+  const input = document.getElementById('filter-mov-usuario');
+  const list = document.getElementById('filter-mov-usuario-list');
+  if (!root || !chip || !chipText || !input) return;
+
+  if (movimientoUsuarioSeleccionado) {
+    chipText.textContent = movimientoUsuarioSeleccionado;
+    chip.classList.remove('hidden');
+    root.classList.add('is-selected');
+    input.value = '';
+    input.setAttribute('aria-expanded', 'false');
+    list?.classList.add('hidden');
+  } else {
+    chipText.textContent = '';
+    chip.classList.add('hidden');
+    root.classList.remove('is-selected');
+    input.setAttribute('aria-expanded', 'false');
+    list?.classList.add('hidden');
+  }
+}
+
+function escapeAttr(str) {
+  return escapeHtml(str).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function renderUsuarioAutocompleteOptions(matches, activeIndex = -1) {
+  const list = document.getElementById('filter-mov-usuario-list');
+  const input = document.getElementById('filter-mov-usuario');
+  if (!list || !input) return;
+  if (!matches.length) {
+    list.innerHTML = '<li class="autocomplete-empty">Sin coincidencias</li>';
+    list.classList.remove('hidden');
+    input.setAttribute('aria-expanded', 'true');
+    return;
+  }
+  list.innerHTML = matches.map((name, idx) =>
+    `<li class="autocomplete-option${idx === activeIndex ? ' is-active' : ''}" role="option" data-username="${escapeAttr(name)}">${escapeHtml(name)}</li>`
+  ).join('');
+  list.classList.remove('hidden');
+  input.setAttribute('aria-expanded', 'true');
+}
+
+function hideUsuarioAutocomplete() {
+  const list = document.getElementById('filter-mov-usuario-list');
+  const input = document.getElementById('filter-mov-usuario');
+  list?.classList.add('hidden');
+  if (list) {
+    list.style.left = '';
+    list.style.top = '';
+    list.style.width = '';
+  }
+  input?.setAttribute('aria-expanded', 'false');
+}
+
+function initUsuarioAutocompleteMovimientos() {
+  const input = document.getElementById('filter-mov-usuario');
+  const list = document.getElementById('filter-mov-usuario-list');
+  const clearBtn = document.getElementById('filter-mov-usuario-clear');
+  if (!input || !list || input.dataset.acBound === '1') return;
+  input.dataset.acBound = '1';
+  let activeIndex = -1;
+  let currentMatches = [];
+
+  input.addEventListener('input', () => {
+    if (movimientoUsuarioSeleccionado) return;
+    activeIndex = -1;
+    currentMatches = filterUsernamesPredictive(input.value);
+    if (!(input.value || '').trim()) {
+      hideUsuarioAutocomplete();
+      return;
+    }
+    renderUsuarioAutocompleteOptions(currentMatches, activeIndex);
+  });
+
+  input.addEventListener('keydown', (e) => {
+    if (list.classList.contains('hidden')) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (!currentMatches.length) return;
+      activeIndex = (activeIndex + 1) % currentMatches.length;
+      renderUsuarioAutocompleteOptions(currentMatches, activeIndex);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!currentMatches.length) return;
+      activeIndex = (activeIndex - 1 + currentMatches.length) % currentMatches.length;
+      renderUsuarioAutocompleteOptions(currentMatches, activeIndex);
+    } else if (e.key === 'Enter') {
+      if (activeIndex >= 0 && currentMatches[activeIndex]) {
+        e.preventDefault();
+        setMovimientoUsuarioSeleccionado(currentMatches[activeIndex]);
+        aplicarFiltrosMovimientos();
+      }
+    } else if (e.key === 'Escape') {
+      hideUsuarioAutocomplete();
+    }
+  });
+
+  list.addEventListener('mousedown', (e) => {
+    const option = e.target.closest('[data-username]');
+    if (!option) return;
+    e.preventDefault();
+    setMovimientoUsuarioSeleccionado(option.getAttribute('data-username'));
+    aplicarFiltrosMovimientos();
+  });
+
+  input.addEventListener('blur', () => {
+    setTimeout(() => hideUsuarioAutocomplete(), 120);
+  });
+
+  clearBtn?.addEventListener('click', (e) => {
+    e.preventDefault();
+    setMovimientoUsuarioSeleccionado(null);
+    document.getElementById('filter-mov-usuario')?.focus();
+    aplicarFiltrosMovimientos();
+  });
+}
+
+async function populateFiltroBodegasMovimiento() {
+  const select = document.getElementById('filter-bodega-movimiento');
+  if (!select) return;
+  try {
+    const bodegas = bodegasCache.length ? bodegasCache : (await apiFetch('/api/bodegas') || []);
+    if (!bodegasCache.length) bodegasCache = bodegas;
+    fillSelectOptions(
+      select,
+      bodegas,
+      'Todas las bodegas',
+      (b) => `<option value="${b.id}">${escapeHtml(b.nombre)}</option>`
+    );
+  } catch {
+    /* el listado sigue usable sin el combo de bodegas */
+  }
+}
+
+async function populateUsuariosAutocomplete() {
+  try {
+    usuariosFiltroCache = await apiFetch('/api/usuarios') || [];
+  } catch {
+    usuariosFiltroCache = [];
+  }
+}
 
 async function loadMovimientos() {
   try {
+    await Promise.all([populateFiltroBodegasMovimiento(), populateUsuariosAutocomplete()]);
     movimientosData = await apiFetch('/api/movimientos') || [];
-    renderMovimientosTable(movimientosData);
+    initUsuarioAutocompleteMovimientos();
+    bindClearableInputs();
+    aplicarFiltrosMovimientos();
     setApiStatus(true);
   } catch (e) {
     showTableError('tbody-movimientos', 7, e.message);
@@ -1071,10 +1324,16 @@ async function loadMovimientos() {
   }
 }
 
-function renderMovimientosTable(data) {
+function renderMovimientosTable(data, filtrosActivos = false) {
   const tbody = document.getElementById('tbody-movimientos');
   if (!tbody) return;
-  if (!data.length) { tbody.innerHTML = `<tr><td colspan="7"><div class="table-loading">No hay movimientos registrados</div></td></tr>`; return; }
+  if (!data.length) {
+    const msg = filtrosActivos
+      ? 'No se encontraron movimientos'
+      : 'No hay movimientos registrados';
+    tbody.innerHTML = `<tr><td colspan="7"><div class="table-loading">${msg}</div></td></tr>`;
+    return;
+  }
   tbody.innerHTML = data.map(m => {
     const tipo = m.tipoMovimiento || '—';
     const badgeClass = `badge badge-${tipo.toLowerCase()}`;
@@ -1097,28 +1356,90 @@ function renderMovimientosTable(data) {
   }).join('');
 }
 
-document.getElementById('search-movimientos')?.addEventListener('input', (e) => {
-  const q = e.target.value.toLowerCase();
-  const tipo = document.getElementById('filter-tipo-movimiento').value;
-  filterMovimientos(q, tipo);
-});
-
-document.getElementById('filter-tipo-movimiento')?.addEventListener('change', (e) => {
-  const q = document.getElementById('search-movimientos').value.toLowerCase();
-  filterMovimientos(q, e.target.value);
-});
-
-function filterMovimientos(q, tipo) {
-  let data = movimientosData;
-  if (tipo) data = data.filter(m => m.tipoMovimiento === tipo);
-  if (q) data = data.filter(m =>
-    String(m.id).includes(q) ||
-    (m.usuario?.username || '').toLowerCase().includes(q) ||
-    (m.bodegaOrigen?.nombre || '').toLowerCase().includes(q) ||
-    (m.bodegaDestino?.nombre || '').toLowerCase().includes(q)
-  );
-  renderMovimientosTable(data);
+function leerFiltrosMovimientos() {
+  return {
+    tipo: document.getElementById('filter-tipo-movimiento')?.value || '',
+    bodegaId: document.getElementById('filter-bodega-movimiento')?.value || '',
+    fechaInicioRaw: document.getElementById('filter-mov-fecha-inicio')?.value || '',
+    fechaFinRaw: document.getElementById('filter-mov-fecha-fin')?.value || '',
+    idRaw: document.getElementById('filter-mov-id')?.value?.trim() || '',
+    usuario: movimientoUsuarioSeleccionado || '',
+  };
 }
+
+function hayFiltrosMovimientosActivos(f) {
+  return Boolean(f.tipo || f.bodegaId || f.fechaInicioRaw || f.fechaFinRaw || f.idRaw || f.usuario);
+}
+
+function validarRangoFechasMovimientos(fechaInicioRaw, fechaFinRaw) {
+  if (!fechaInicioRaw && !fechaFinRaw) return true;
+  if (fechaInicioRaw && fechaFinRaw) {
+    const inicio = new Date(fechaInicioRaw);
+    const fin = new Date(fechaFinRaw);
+    if (Number.isNaN(inicio.getTime()) || Number.isNaN(fin.getTime())) {
+      setMovimientosFiltroError('Las fechas del rango no son válidas. Revisa el formato e inténtalo de nuevo.');
+      return false;
+    }
+    if (inicio > fin) {
+      setMovimientosFiltroError('La fecha de inicio no puede ser posterior a la fecha de fin. Ajusta el rango e inténtalo de nuevo.');
+      return false;
+    }
+  }
+  setMovimientosFiltroError('');
+  return true;
+}
+
+function aplicarFiltrosMovimientos() {
+  const f = leerFiltrosMovimientos();
+  if (!validarRangoFechasMovimientos(f.fechaInicioRaw, f.fechaFinRaw)) {
+    renderMovimientosTable([], true);
+    return;
+  }
+
+  let data = movimientosData;
+  if (f.tipo) {
+    data = data.filter((m) => m.tipoMovimiento === f.tipo);
+  }
+  if (f.bodegaId) {
+    const bodegaId = Number(f.bodegaId);
+    data = data.filter((m) =>
+      m.bodegaOrigen?.id === bodegaId || m.bodegaDestino?.id === bodegaId
+    );
+  }
+  if (f.fechaInicioRaw) {
+    const inicio = new Date(f.fechaInicioRaw).getTime();
+    data = data.filter((m) => {
+      const t = new Date(m.fecha).getTime();
+      return !Number.isNaN(t) && t >= inicio;
+    });
+  }
+  if (f.fechaFinRaw) {
+    const fin = new Date(f.fechaFinRaw).getTime();
+    data = data.filter((m) => {
+      const t = new Date(m.fecha).getTime();
+      return !Number.isNaN(t) && t <= fin;
+    });
+  }
+  if (f.idRaw) {
+    const id = Number(f.idRaw);
+    data = data.filter((m) => m.id === id);
+  }
+  if (f.usuario) {
+    const selected = f.usuario.toLowerCase();
+    data = data.filter((m) =>
+      (m.usuario?.username || String(m.usuario || '')).toLowerCase() === selected
+    );
+  }
+
+  setMovimientosFiltroError('');
+  renderMovimientosTable(data, hayFiltrosMovimientosActivos(f));
+}
+
+['filter-tipo-movimiento', 'filter-bodega-movimiento', 'filter-mov-fecha-inicio', 'filter-mov-fecha-fin']
+  .forEach((id) => {
+    document.getElementById(id)?.addEventListener('change', aplicarFiltrosMovimientos);
+  });
+document.getElementById('filter-mov-id')?.addEventListener('input', aplicarFiltrosMovimientos);
 
 function verDetalleMovimiento(id) {
   const m = movimientosData.find(x => x.id === id);
@@ -1222,6 +1543,12 @@ document.getElementById('form-movimiento')?.addEventListener('submit', async (e)
 /* ─────────────────────────────────────────────────────
    REPORTES
    ───────────────────────────────────────────────────── */
+const REPORTE_FILTROS_POR_TIPO = {
+  inventario: ['bodega', 'producto', 'categoria'],
+  movimientos: ['bodega', 'producto', 'tipo-movimiento', 'fechas'],
+  auditoria: ['entidad', 'fechas'],
+};
+
 function toIsoLocal(value) {
   if (!value) return null;
   const d = new Date(value);
@@ -1229,40 +1556,130 @@ function toIsoLocal(value) {
   return d.toISOString();
 }
 
-async function initReportes() {
-  const select = document.getElementById('reporte-bodega');
-  try {
-    const bodegas = await apiFetch('/api/bodegas') || [];
-    const current = select.value;
-    select.innerHTML = '<option value="">Todas las bodegas</option>' + bodegas.map(b =>
-      `<option value="${b.id}" data-nombre="${escapeHtml(b.nombre)}">${escapeHtml(b.nombre)}</option>`
-    ).join('');
-    if (current) select.value = current;
-  } catch { /* se puede generar sin el combo de bodegas */ }
+function setReporteFiltroError(message) {
+  const el = document.getElementById('reporte-filtro-error');
+  if (!el) return;
+  if (!message) {
+    el.textContent = '';
+    el.classList.add('hidden');
+    return;
+  }
+  el.textContent = message;
+  el.classList.remove('hidden');
 }
 
+function actualizarVisibilidadFiltrosReporte() {
+  const tipo = document.getElementById('reporte-tipo')?.value || 'inventario';
+  const visibles = new Set(REPORTE_FILTROS_POR_TIPO[tipo] || []);
+  document.querySelectorAll('#page-reportes [data-filter]').forEach((field) => {
+    const key = field.getAttribute('data-filter');
+    field.classList.toggle('hidden', !visibles.has(key));
+  });
+  setReporteFiltroError('');
+}
+
+function fillSelectOptions(select, items, allLabel, mapFn) {
+  if (!select) return;
+  const current = select.value;
+  select.innerHTML = `<option value="">${escapeHtml(allLabel)}</option>` + items.map(mapFn).join('');
+  if (current && [...select.options].some((o) => o.value === current)) {
+    select.value = current;
+  }
+}
+
+async function initReportes() {
+  actualizarVisibilidadFiltrosReporte();
+  bindClearableInputs();
+  try {
+    const [bodegas, productos] = await Promise.all([
+      apiFetch('/api/bodegas'),
+      apiFetch('/api/productos'),
+    ]);
+    bodegasCache = bodegas || bodegasCache;
+
+    fillSelectOptions(
+      document.getElementById('reporte-bodega'),
+      bodegas || [],
+      'Todas las bodegas',
+      (b) => `<option value="${b.id}">${escapeHtml(b.nombre)}</option>`
+    );
+
+    const listaProductos = productos || [];
+    fillSelectOptions(
+      document.getElementById('reporte-producto'),
+      listaProductos,
+      'Todos los productos',
+      (p) => `<option value="${p.id}">${escapeHtml(p.nombre)}</option>`
+    );
+
+    const categorias = [...new Set(listaProductos.map((p) => p.categoria).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, 'es'));
+    fillSelectOptions(
+      document.getElementById('reporte-categoria'),
+      categorias,
+      'Todas las categorías',
+      (c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`
+    );
+  } catch (e) {
+    showToast(e.message || 'No se pudieron cargar los filtros de reportes', 'error');
+  }
+}
+
+document.getElementById('reporte-tipo')?.addEventListener('change', actualizarVisibilidadFiltrosReporte);
 document.getElementById('btn-generar-reporte')?.addEventListener('click', generarReporte);
+
+function validarRangoFechasReporte(fechaInicioRaw, fechaFinRaw) {
+  if (!fechaInicioRaw && !fechaFinRaw) return true;
+  if (fechaInicioRaw && fechaFinRaw) {
+    const inicio = new Date(fechaInicioRaw);
+    const fin = new Date(fechaFinRaw);
+    if (Number.isNaN(inicio.getTime()) || Number.isNaN(fin.getTime())) {
+      setReporteFiltroError('Las fechas del rango no son válidas. Revisa el formato e inténtalo de nuevo.');
+      return false;
+    }
+    if (inicio > fin) {
+      setReporteFiltroError('La fecha de inicio no puede ser posterior a la fecha de fin. Ajusta el rango e inténtalo de nuevo.');
+      return false;
+    }
+  }
+  setReporteFiltroError('');
+  return true;
+}
 
 async function generarReporte() {
   const tipo = document.getElementById('reporte-tipo').value;
-  const bodegaSelect = document.getElementById('reporte-bodega');
-  const bodegaId = bodegaSelect.value;
-  const bodegaNombre = bodegaSelect.selectedOptions[0]?.dataset?.nombre || bodegaSelect.selectedOptions[0]?.textContent;
+  const bodegaId = document.getElementById('reporte-bodega').value;
+  const productoId = document.getElementById('reporte-producto').value;
+  const categoria = document.getElementById('reporte-categoria').value;
   const tipoMov = document.getElementById('reporte-tipo-movimiento').value;
-  const producto = document.getElementById('reporte-producto').value.trim();
-  const entidad = document.getElementById('reporte-entidad').value.trim();
-  const fechaInicio = toIsoLocal(document.getElementById('reporte-fecha-inicio').value);
-  const fechaFin = toIsoLocal(document.getElementById('reporte-fecha-fin').value);
+  const entidad = document.getElementById('reporte-entidad').value;
+  const fechaInicioRaw = document.getElementById('reporte-fecha-inicio').value;
+  const fechaFinRaw = document.getElementById('reporte-fecha-fin').value;
   const tbody = document.getElementById('tbody-reportes');
   const thead = document.getElementById('thead-reportes');
+
+  if ((tipo === 'movimientos' || tipo === 'auditoria')
+      && !validarRangoFechasReporte(fechaInicioRaw, fechaFinRaw)) {
+    tbody.innerHTML = `<tr><td colspan="8"><div class="table-loading">Corrige el rango de fechas para generar el reporte</div></td></tr>`;
+    return;
+  }
+
+  const fechaInicio = toIsoLocal(fechaInicioRaw);
+  const fechaFin = toIsoLocal(fechaFinRaw);
+  setReporteFiltroError('');
   tbody.innerHTML = `<tr class="loading-row"><td colspan="8"><div class="table-loading">Generando reporte...</div></td></tr>`;
+
   try {
     if (tipo === 'inventario') {
-      const qs = bodegaId ? `?bodegaId=${encodeURIComponent(bodegaId)}` : '';
-      const data = await apiFetch(`/api/reportes/inventario${qs}`) || [];
+      const params = new URLSearchParams();
+      if (bodegaId) params.set('bodegaId', bodegaId);
+      if (productoId) params.set('productoId', productoId);
+      if (categoria) params.set('categoria', categoria);
+      const q = params.toString();
+      const data = await apiFetch(`/api/reportes/inventario${q ? '?' + q : ''}`) || [];
       thead.innerHTML = `<tr><th>Bodega</th><th>Producto</th><th>Categoría</th><th>Cantidad</th></tr>`;
       if (!data.length) {
-        tbody.innerHTML = `<tr><td colspan="4"><div class="table-loading">Sin registros de inventario</div></td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="4"><div class="table-loading">Sin registros de inventario para los filtros</div></td></tr>`;
         return;
       }
       tbody.innerHTML = data.map(r => `
@@ -1274,8 +1691,8 @@ async function generarReporte() {
         </tr>`).join('');
     } else if (tipo === 'movimientos') {
       const params = new URLSearchParams();
-      if (bodegaId && bodegaNombre && bodegaNombre !== 'Todas las bodegas') params.set('bodega', bodegaNombre);
-      if (producto) params.set('producto', producto);
+      if (bodegaId) params.set('bodegaId', bodegaId);
+      if (productoId) params.set('productoId', productoId);
       if (tipoMov) params.set('tipoMovimiento', tipoMov);
       if (fechaInicio) params.set('fechaInicio', fechaInicio);
       if (fechaFin) params.set('fechaFin', fechaFin);
@@ -1319,6 +1736,7 @@ async function generarReporte() {
     }
     setApiStatus(true);
   } catch (err) {
+    setReporteFiltroError(err.message || 'No se pudo generar el reporte');
     tbody.innerHTML = `<tr><td colspan="8"><div class="table-loading">${escapeHtml(err.message)}</div></td></tr>`;
     setApiStatus(false);
   }
@@ -1409,10 +1827,23 @@ function verDetalleAuditoria(id) {
    ───────────────────────────────────────────────────── */
 let usuariosData = [];
 
+function aplicarFiltrosUsuarios() {
+  const q = (document.getElementById('search-usuarios')?.value || '').toLowerCase().trim();
+  const rol = document.getElementById('filter-rol-usuario')?.value || '';
+  let data = usuariosData.slice().sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
+  if (rol) {
+    data = data.filter((u) => u.rol === rol);
+  }
+  if (q) {
+    data = data.filter((u) => (u.username || '').toLowerCase().includes(q));
+  }
+  renderUsuariosTable(data, Boolean(q || rol));
+}
+
 async function loadUsuarios() {
   try {
     usuariosData = await apiFetch('/api/usuarios') || [];
-    renderUsuariosTable(usuariosData);
+    aplicarFiltrosUsuarios();
     setApiStatus(true);
   } catch (e) {
     showTableError('tbody-usuarios', 4, e.message);
@@ -1420,10 +1851,14 @@ async function loadUsuarios() {
   }
 }
 
-function renderUsuariosTable(data) {
+function renderUsuariosTable(data, filtrosActivos = false) {
   const tbody = document.getElementById('tbody-usuarios');
   if (!tbody) return;
-  if (!data.length) { tbody.innerHTML = `<tr><td colspan="4"><div class="table-loading">No hay usuarios registrados</div></td></tr>`; return; }
+  if (!data.length) {
+    const msg = filtrosActivos ? 'No se encontraron usuarios' : 'No hay usuarios registrados';
+    tbody.innerHTML = `<tr><td colspan="4"><div class="table-loading">${msg}</div></td></tr>`;
+    return;
+  }
   tbody.innerHTML = data.map(u => `
     <tr>
       <td><span style="font-weight:600;color:var(--clr-txt-muted)">#${u.id}</span></td>
@@ -1435,7 +1870,7 @@ function renderUsuariosTable(data) {
           ${escapeHtml(u.username)}
         </div>
       </td>
-      <td><span class="badge ${u.rol === 'ADMIN' ? 'badge-admin' : u.rol === 'AGENTE' ? 'badge-agente' : 'badge-empleado'}">${u.rol}</span></td>
+      <td><span class="badge ${u.rol === 'ADMIN' ? 'badge-admin' : u.rol === 'AGENTE' ? 'badge-agente' : 'badge-empleado'}">${u.rol === 'ADMIN' ? 'Admin' : u.rol === 'AGENTE' ? 'Agente' : 'Empleado'}</span></td>
       <td>
         <div class="actions-cell">
           <button class="btn-icon" onclick="editUsuario(${u.id})" title="Editar">
@@ -1450,10 +1885,8 @@ function renderUsuariosTable(data) {
   `).join('');
 }
 
-document.getElementById('search-usuarios')?.addEventListener('input', (e) => {
-  const q = e.target.value.toLowerCase();
-  renderUsuariosTable(usuariosData.filter(u => u.username.toLowerCase().includes(q)));
-});
+document.getElementById('search-usuarios')?.addEventListener('input', aplicarFiltrosUsuarios);
+document.getElementById('filter-rol-usuario')?.addEventListener('change', aplicarFiltrosUsuarios);
 
 document.getElementById('btn-nuevo-usuario')?.addEventListener('click', () => {
   document.getElementById('form-usuario').reset();

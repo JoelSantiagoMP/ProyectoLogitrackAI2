@@ -219,7 +219,6 @@ def main() -> None:
             "proveedor_id": p["proveedorId"],
             "bodega_destino_id": p["bodegaDestinoId"],
             "cantidad": int(cantidad),
-            "precio_unitario": 1.0,
         }
     else:
         orden_args = {
@@ -227,7 +226,6 @@ def main() -> None:
             "proveedor_id": 1,
             "bodega_destino_id": 1,
             "cantidad": 10,
-            "precio_unitario": 1.0,
         }
 
     orden = mcp_call("crear_orden_borrador", orden_args)

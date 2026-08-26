@@ -146,15 +146,13 @@ def crear_orden_borrador(
     proveedor_id: int,
     bodega_destino_id: int,
     cantidad: int,
-    precio_unitario: float,
 ) -> str:
-    """Crea una orden de compra en estado BORRADOR. No aprueba ni recibe la orden."""
+    """Crea una orden de compra en estado BORRADOR. El precio unitario lo toma el backend del producto."""
     body = {
         "productoId": producto_id,
         "proveedorId": proveedor_id,
         "bodegaDestinoId": bodega_destino_id,
         "cantidad": cantidad,
-        "precioUnitario": precio_unitario,
     }
     return _as_json(_request("POST", "/api/ordenes", json=body))
 

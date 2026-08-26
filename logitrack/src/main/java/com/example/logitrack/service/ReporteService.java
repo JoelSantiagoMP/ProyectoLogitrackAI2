@@ -13,9 +13,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 
 @Service
 public class ReporteService {
+
+    private static final Set<String> ENTIDADES_AUDITORIA = Set.of(
+            "producto", "bodega", "movimiento", "ordencompra", "usuario", "resumenpanel");
 
     private final MovimientoRepository movimientoRepository;
     private final AuditoriaRepository auditoriaRepository;
@@ -30,18 +34,17 @@ public class ReporteService {
     }
 
     @Transactional(readOnly = true)
-    public List<Movimiento> obtenerReporteMovimientos(String bodega, String producto,
+    public List<Movimiento> obtenerReporteMovimientos(Long bodegaId, Long productoId,
             TipoMovimiento tipoMovimiento, LocalDateTime fechaInicio, LocalDateTime fechaFin) {
-        String bodegaFiltro = normalize(bodega);
-        String productoFiltro = normalize(producto);
+        validarRangoFechas(fechaInicio, fechaFin);
         LocalDateTime fechaInicioSafe = fechaInicio != null ? fechaInicio : LocalDateTime.now();
         LocalDateTime fechaFinSafe = fechaFin != null ? fechaFin : LocalDateTime.now();
         TipoMovimiento tipoSafe = tipoMovimiento != null ? tipoMovimiento : TipoMovimiento.ENTRADA;
         return movimientoRepository.findByFiltrosOpcionales(
-                bodegaFiltro != null,
-                bodegaFiltro != null ? bodegaFiltro : "",
-                productoFiltro != null,
-                productoFiltro != null ? productoFiltro : "",
+                bodegaId != null,
+                bodegaId != null ? bodegaId : 0L,
+                productoId != null,
+                productoId != null ? productoId : 0L,
                 tipoMovimiento != null,
                 tipoSafe,
                 fechaInicio != null,
@@ -53,7 +56,8 @@ public class ReporteService {
     @Transactional(readOnly = true)
     public List<AuditoriaDTO> obtenerAuditoriasFiltradas(String entidadAfectada,
             LocalDateTime fechaInicio, LocalDateTime fechaFin) {
-        String entidadFiltro = normalize(entidadAfectada);
+        validarRangoFechas(fechaInicio, fechaFin);
+        String entidadFiltro = normalizeEntidad(entidadAfectada);
         LocalDateTime fechaInicioSafe = fechaInicio != null ? fechaInicio : LocalDateTime.now();
         LocalDateTime fechaFinSafe = fechaFin != null ? fechaFin : LocalDateTime.now();
         return auditoriaRepository.findByFiltrosOpcionales(
@@ -69,8 +73,15 @@ public class ReporteService {
     }
 
     @Transactional(readOnly = true)
-    public List<InventarioReporteDTO> obtenerReporteInventario(Long bodegaId) {
-        return inventarioBodegaRepository.findInventarioParaReporte(bodegaId).stream()
+    public List<InventarioReporteDTO> obtenerReporteInventario(Long bodegaId, Long productoId, String categoria) {
+        String categoriaFiltro = normalize(categoria);
+        return inventarioBodegaRepository
+                .findInventarioParaReporte(
+                        bodegaId,
+                        productoId,
+                        categoriaFiltro != null,
+                        categoriaFiltro != null ? categoriaFiltro : "")
+                .stream()
                 .map(this::toInventarioDto)
                 .toList();
     }
@@ -85,10 +96,29 @@ public class ReporteService {
                 inventario.getCantidad());
     }
 
+    private void validarRangoFechas(LocalDateTime fechaInicio, LocalDateTime fechaFin) {
+        if (fechaInicio != null && fechaFin != null && fechaInicio.isAfter(fechaFin)) {
+            throw new IllegalArgumentException(
+                    "La fecha de inicio no puede ser posterior a la fecha de fin.");
+        }
+    }
+
     private String normalize(String value) {
         if (value == null || value.isBlank()) {
             return null;
         }
         return value.trim().toLowerCase();
+    }
+
+    private String normalizeEntidad(String entidadAfectada) {
+        String normalizada = normalize(entidadAfectada);
+        if (normalizada == null) {
+            return null;
+        }
+        if (!ENTIDADES_AUDITORIA.contains(normalizada)) {
+            throw new IllegalArgumentException(
+                    "Entidad de auditoría no válida. Use una de las opciones del selector.");
+        }
+        return normalizada;
     }
 }

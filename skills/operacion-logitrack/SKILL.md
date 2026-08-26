@@ -41,7 +41,7 @@ cantidad = ceil(max(1, puntoReorden × 2 - stockTotal))
 ```
 
 Usa `productoId`, `proveedorId` y `bodegaDestinoId` de esa fila.
-`precioUnitario` debe ser un número positivo (si no hay precio en contexto, usa `1`).
+El **precio unitario y el total** los calcula el backend a partir del precio del producto en catálogo (`producto.precio × cantidad`); no envíes ni inventes un precio.
 Llama `crear_orden_borrador` **una sola vez**. Si no hay productos en riesgo, no crees orden.
 
 ## Restricción obligatoria

@@ -41,7 +41,13 @@ public interface InventarioBodegaRepository extends JpaRepository<InventarioBode
             JOIN FETCH i.bodega
             JOIN FETCH i.producto
             WHERE (:bodegaId IS NULL OR i.bodega.id = :bodegaId)
+              AND (:productoId IS NULL OR i.producto.id = :productoId)
+              AND (:filtrarCategoria = false OR LOWER(i.producto.categoria) = :categoria)
             ORDER BY i.bodega.nombre, i.producto.nombre
             """)
-    List<InventarioBodega> findInventarioParaReporte(@Param("bodegaId") Long bodegaId);
+    List<InventarioBodega> findInventarioParaReporte(
+            @Param("bodegaId") Long bodegaId,
+            @Param("productoId") Long productoId,
+            @Param("filtrarCategoria") boolean filtrarCategoria,
+            @Param("categoria") String categoria);
 }

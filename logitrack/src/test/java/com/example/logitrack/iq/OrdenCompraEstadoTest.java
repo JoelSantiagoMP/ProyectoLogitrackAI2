@@ -174,6 +174,25 @@ class OrdenCompraEstadoTest {
     }
 
     @Test
+    void crearOrden_usaPrecioDelProducto_noDelRequest() throws Exception {
+        String token = tokenDe("agente-iq", "agente123");
+
+        String body = mockMvc.perform(post("/api/ordenes")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"productoId":%d,"proveedorId":%d,"bodegaDestinoId":%d,"precioUnitario":1.0,"cantidad":5}
+                                """.formatted(productoId, proveedorId, bodegaId)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertEquals(1000.0, objectMapper.readTree(body).get("precioUnitario").asDouble(), 0.001);
+        assertEquals(5000.0, objectMapper.readTree(body).get("total").asDouble(), 0.001);
+    }
+
+    @Test
     void ordenCantidadInvalida_retorna400() throws Exception {
         String token = tokenDe("agente-iq", "agente123");
 
@@ -195,7 +214,7 @@ class OrdenCompraEstadoTest {
     }
 
     @Test
-    void recepcion_creaMovimientoEntrada() throws Exception {
+    void recepcion_creaMovimientoEntradaYSumaStock() throws Exception {
         String token = tokenDe("admin-iq", "admin123");
         Usuario admin = usuarioRepository.findByUsername("admin-iq").orElseThrow();
 
@@ -210,6 +229,10 @@ class OrdenCompraEstadoTest {
                 .creadoPor(admin)
                 .build());
 
+        int stockAntes = inventarioBodegaRepository
+                .findByBodegaIdAndProductoId(bodegaId, productoId)
+                .map(i -> i.getCantidad())
+                .orElse(0);
         long entradasAntes = movimientoRepository.findByTipoMovimiento(TipoMovimiento.ENTRADA).size();
 
         mockMvc.perform(patch("/api/ordenes/{id}/estado", aprobada.getId())
@@ -231,6 +254,52 @@ class OrdenCompraEstadoTest {
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("No se registró la ENTRADA de recepción"));
         assertEquals(TipoMovimiento.ENTRADA, entrada.getTipoMovimiento());
+
+        int stockDespues = inventarioBodegaRepository
+                .findByBodegaIdAndProductoId(bodegaId, productoId)
+                .map(i -> i.getCantidad())
+                .orElse(0);
+        assertEquals(stockAntes + 12, stockDespues);
+    }
+
+    @Test
+    void aprobar_noAlteraStock_yCorrigeTotalLegacy() throws Exception {
+        String token = tokenDe("admin-iq", "admin123");
+        Usuario admin = usuarioRepository.findByUsername("admin-iq").orElseThrow();
+
+        OrdenCompra borradorMalCalculado = ordenCompraRepository.save(OrdenCompra.builder()
+                .producto(productoRepository.findById(productoId).orElseThrow())
+                .proveedor(proveedorRepository.findById(proveedorId).orElseThrow())
+                .bodegaDestino(bodegaRepository.findById(bodegaId).orElseThrow())
+                .cantidad(82)
+                .precioUnitario(1.0)
+                .total(82.0)
+                .estado(EstadoOrdenCompra.BORRADOR)
+                .creadoPor(admin)
+                .build());
+
+        int stockAntes = inventarioBodegaRepository
+                .findByBodegaIdAndProductoId(bodegaId, productoId)
+                .map(i -> i.getCantidad())
+                .orElse(0);
+
+        String body = mockMvc.perform(patch("/api/ordenes/{id}/estado", borradorMalCalculado.getId())
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"estado\":\"APROBADA\"}"))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        assertEquals(1000.0, objectMapper.readTree(body).get("precioUnitario").asDouble(), 0.001);
+        assertEquals(82000.0, objectMapper.readTree(body).get("total").asDouble(), 0.001);
+
+        int stockDespues = inventarioBodegaRepository
+                .findByBodegaIdAndProductoId(bodegaId, productoId)
+                .map(i -> i.getCantidad())
+                .orElse(0);
+        assertEquals(stockAntes, stockDespues);
     }
 
     @Test
