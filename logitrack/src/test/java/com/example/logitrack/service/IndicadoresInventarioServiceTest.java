@@ -47,4 +47,17 @@ class IndicadoresInventarioServiceTest {
 
         assertFalse(enRiesgo);
     }
+
+    @Test
+    void ocupacion_calculaPorcentajeSinTopeArtificial() {
+        assertEquals(0.3, service.calcularPorcentajeOcupacion(75, 25000), 0.001);
+        assertEquals(93.75, service.calcularPorcentajeOcupacion(75, 80), 0.001);
+        assertEquals(125.0, service.calcularPorcentajeOcupacion(125, 100), 0.001);
+    }
+
+    @Test
+    void ocupacion_capacidadInvalida_devuelveCero() {
+        assertEquals(0.0, service.calcularPorcentajeOcupacion(75, 0), 0.001);
+        assertEquals(0.0, service.calcularPorcentajeOcupacion(75, null), 0.001);
+    }
 }

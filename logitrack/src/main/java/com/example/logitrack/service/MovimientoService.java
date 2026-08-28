@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -49,7 +50,7 @@ public class MovimientoService {
     @Transactional
     public Movimiento registrarMovimiento(Movimiento movimiento, String username) {
         if (movimiento.getFecha() == null) {
-            movimiento.setFecha(LocalDateTime.now());
+            movimiento.setFecha(LocalDateTime.now(ZoneOffset.UTC));
         }
 
         Usuario usuarioResponsable = usuarioRepository.findByUsername(username)
@@ -69,6 +70,14 @@ public class MovimientoService {
             destino = bodegaRepository.findById(movimiento.getBodegaDestino().getId())
                     .orElseThrow(() -> new ResourceNotFoundException("Bodega destino no encontrada"));
             movimiento.setBodegaDestino(destino);
+        }
+
+        if (movimiento.getTipoMovimiento() == TipoMovimiento.ENTRADA) {
+            movimiento.setBodegaOrigen(null);
+            origen = null;
+        } else if (movimiento.getTipoMovimiento() == TipoMovimiento.SALIDA) {
+            movimiento.setBodegaDestino(null);
+            destino = null;
         }
 
         validarBodegasPorTipo(movimiento.getTipoMovimiento(), origen, destino);

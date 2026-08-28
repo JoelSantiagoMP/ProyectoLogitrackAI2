@@ -29,7 +29,7 @@ public class ProveedorService {
 
     @Transactional(readOnly = true)
     public List<Proveedor> listarTodos() {
-        return proveedorRepository.findAll();
+        return proveedorRepository.findAllByOrderByIdAsc();
     }
 
     @Transactional

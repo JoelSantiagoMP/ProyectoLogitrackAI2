@@ -29,7 +29,7 @@ public class BodegaService {
 
     @Transactional(readOnly = true)
     public List<Bodega> obtenerTodas() {
-        return bodegaRepository.findAll();
+        return bodegaRepository.findAllByOrderByIdAsc();
     }
 
     @Transactional(readOnly = true)

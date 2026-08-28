@@ -47,7 +47,7 @@ public class ProductoService {
 
     @Transactional(readOnly = true)
     public List<Producto> obtenerTodos() {
-        List<Producto> productos = productoRepository.findAll();
+        List<Producto> productos = productoRepository.findAllByOrderByIdAsc();
         enriquecerProductos(productos);
         return productos;
     }
@@ -62,14 +62,14 @@ public class ProductoService {
 
     @Transactional(readOnly = true)
     public List<Producto> obtenerPorCategoria(String categoria) {
-        List<Producto> productos = productoRepository.findByCategoriaIgnoreCase(categoria);
+        List<Producto> productos = productoRepository.findByCategoriaIgnoreCaseOrderByIdAsc(categoria);
         enriquecerProductos(productos);
         return productos;
     }
 
     @Transactional(readOnly = true)
     public List<Producto> obtenerProductosStockBajo() {
-        List<Producto> productos = productoRepository.findAll();
+        List<Producto> productos = productoRepository.findAllByOrderByIdAsc();
         enriquecerProductos(productos);
         return productos.stream()
                 .filter(p -> p.getStock() < 10)

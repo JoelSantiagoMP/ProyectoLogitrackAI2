@@ -11,6 +11,10 @@ let deleteCallback = null;
 let bodegasCache = [];
 let ordenesCache = [];
 
+function sortEntitiesByIdAsc(items) {
+  return [...(items || [])].sort((a, b) => Number(a.id) - Number(b.id));
+}
+
 /* ─────────────────────────────────────────────────────
    AUTH HELPERS — Token JWT solo en sessionStorage
    ───────────────────────────────────────────────────── */
@@ -495,7 +499,7 @@ async function loadDashboard() {
     const results = await Promise.allSettled(fetches);
     const [kpisR, resumenR, riesgoR, ordenesR, bodegasR, aprobadasR] = results;
 
-    if (bodegasR.status === 'fulfilled') bodegasCache = bodegasR.value || [];
+    if (bodegasR.status === 'fulfilled') bodegasCache = sortEntitiesByIdAsc(bodegasR.value || []);
     if (kpisR.status === 'fulfilled') renderKpis(kpisR.value);
     else showToast(kpisR.reason?.message || 'No se pudieron cargar los KPIs', 'error');
     renderPanelResumen(resumenR.status === 'fulfilled' ? resumenR.value : null);
@@ -535,9 +539,15 @@ function renderKpis(kpis) {
     } else {
       list.innerHTML = ocupacion.map((b) => {
         const pct = Number(b.porcentaje) || 0;
+        const unidades = Number(b.unidades) || 0;
+        const capacidad = Number(b.capacidad) || 0;
         const crit = pct >= 90;
+        const detalleStock = capacidad > 0
+          ? `${unidades.toLocaleString('es-CO')} / ${capacidad.toLocaleString('es-CO')} uds`
+          : `${unidades.toLocaleString('es-CO')} uds`;
         return `<div class="ocupacion-row">
           <div class="ocupacion-head"><strong>${escapeHtml(b.nombre)}</strong><span>${pct.toFixed(1)}%</span></div>
+          <div class="ocupacion-sub">${detalleStock}</div>
           <div class="ocupacion-bar"><span class="${crit ? 'critica' : ''}" style="width:${Math.min(pct, 100)}%"></span></div>
         </div>`;
       }).join('');
@@ -705,7 +715,7 @@ function renderOrdenesAprobadasDashboard(ordenes) {
 
 async function loadOrdenes() {
   try {
-    bodegasCache = await apiFetch('/api/bodegas') || bodegasCache;
+    bodegasCache = sortEntitiesByIdAsc(await apiFetch('/api/bodegas') || bodegasCache);
     const estado = document.getElementById('filter-estado-orden')?.value;
     const path = estado ? `/api/ordenes?estado=${encodeURIComponent(estado)}` : '/api/ordenes';
     ordenesCache = await apiFetch(path) || [];
@@ -827,7 +837,7 @@ let bodegasData = [];
 
 async function loadBodegas() {
   try {
-    bodegasData = await apiFetch('/api/bodegas') || [];
+    bodegasData = sortEntitiesByIdAsc(await apiFetch('/api/bodegas') || []);
     renderBodegasTable(bodegasData);
     setApiStatus(true);
   } catch (e) {
@@ -840,8 +850,9 @@ function renderBodegasTable(data) {
   const tbody = document.getElementById('tbody-bodegas');
   if (!tbody) return;
   const cols = isAdmin() ? 6 : 5;
-  if (!data.length) { tbody.innerHTML = `<tr><td colspan="${cols}"><div class="table-loading">No hay bodegas registradas</div></td></tr>`; return; }
-  tbody.innerHTML = data.map(b => `
+  const rows = sortEntitiesByIdAsc(data);
+  if (!rows.length) { tbody.innerHTML = `<tr><td colspan="${cols}"><div class="table-loading">No hay bodegas registradas</div></td></tr>`; return; }
+  tbody.innerHTML = rows.map(b => `
     <tr>
       <td><span style="font-weight:600;color:var(--clr-txt-muted)">#${b.id}</span></td>
       <td style="font-weight:500">${escapeHtml(b.nombre)}</td>
@@ -933,6 +944,10 @@ let productosData = [];
 let proveedoresData = [];
 let showingLowStock = false;
 
+function getProductosParaPicker() {
+  return sortEntitiesByIdAsc(productosData);
+}
+
 function populateFiltroCategoriasProducto() {
   const select = document.getElementById('filter-categoria-producto');
   if (!select) return;
@@ -967,12 +982,12 @@ function aplicarFiltrosProductos() {
       (p.proveedorPrincipal?.nombre || '').toLowerCase().includes(q)
     );
   }
-  renderProductosTable(data, Boolean(q || categoria || showingLowStock));
+  renderProductosTable(sortEntitiesByIdAsc(data), Boolean(q || categoria || showingLowStock));
 }
 
 async function loadProductos() {
   try {
-    productosData = await apiFetch('/api/productos') || [];
+    productosData = sortEntitiesByIdAsc(await apiFetch('/api/productos') || []);
     populateFiltroCategoriasProducto();
     aplicarFiltrosProductos();
     setApiStatus(true);
@@ -1032,7 +1047,7 @@ document.getElementById('btn-stock-bajo')?.addEventListener('click', async () =>
     try {
       const data = await apiFetch('/api/productos/stock-bajo');
       const byId = new Map((data || []).map((p) => [p.id, p]));
-      productosData = productosData.map((p) => byId.has(p.id) ? { ...p, ...byId.get(p.id) } : p);
+      productosData = sortEntitiesByIdAsc(productosData.map((p) => byId.has(p.id) ? { ...p, ...byId.get(p.id) } : p));
     } catch (e) { showToast(e.message, 'error'); }
   } else {
     btn.classList.remove('btn-primary');
@@ -1060,7 +1075,7 @@ document.getElementById('btn-nuevo-producto')?.addEventListener('click', async (
 async function loadProveedoresParaPicker() {
   try {
     const data = await apiFetch('/api/proveedores');
-    proveedoresData = data || [];
+    proveedoresData = sortEntitiesByIdAsc(data || []);
   } catch {
     proveedoresData = [];
   }
@@ -1071,7 +1086,7 @@ async function ensureProductoModalData() {
   const tasks = [];
   if (!bodegasCache.length && !bodegasData.length) {
     tasks.push(apiFetch('/api/bodegas').then((data) => {
-      bodegasCache = data || [];
+      bodegasCache = sortEntitiesByIdAsc(data || []);
     }).catch(() => {
       bodegasCache = [];
     }));
@@ -1350,6 +1365,14 @@ function resetEntityPicker(prefix) {
   if (input) input.value = '';
 }
 
+function setEntityPickerDisabled(prefix, disabled) {
+  const input = document.getElementById(`${prefix}-input`);
+  const root = document.getElementById(`${prefix}-picker`);
+  if (input) input.disabled = disabled;
+  if (root) root.classList.toggle('is-disabled', disabled);
+  if (disabled) hideEntityPickerList(prefix);
+}
+
 function initEntityPicker(prefix) {
   const config = entityPickerRegistry[prefix];
   const input = document.getElementById(`${prefix}-input`);
@@ -1362,6 +1385,7 @@ function initEntityPicker(prefix) {
   let currentQuery = '';
 
   input.addEventListener('input', () => {
+    if (input.disabled) return;
     if (getEntityPickerValue(prefix)) return;
     activeIndex = -1;
     const q = (input.value || '').trim();
@@ -1433,6 +1457,7 @@ function initEntityPicker(prefix) {
   });
 
   input.addEventListener('focus', () => {
+    if (input.disabled) return;
     if (getEntityPickerValue(prefix)) return;
     const q = (input.value || '').trim();
     currentQuery = q;
@@ -1555,16 +1580,7 @@ function getBodegasParaPicker() {
   for (const b of merged) {
     if (b?.id != null) byId.set(b.id, b);
   }
-  return [...byId.values()].sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '', 'es', { sensitivity: 'base' }));
-}
-
-function getBodegasParaPicker() {
-  const merged = [...(bodegasCache || []), ...(bodegasData || [])];
-  const byId = new Map();
-  for (const b of merged) {
-    if (b?.id != null) byId.set(b.id, b);
-  }
-  return [...byId.values()].sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '', 'es', { sensitivity: 'base' }));
+  return sortEntitiesByIdAsc([...byId.values()]);
 }
 
 let inventarioMovimientoCache = new Map();
@@ -1661,8 +1677,125 @@ function formatBodegaStockParaProductos(bodegaId) {
   }).join(' · ');
 }
 
+function requiereFiltradoPorBodegaOrigen() {
+  const tipo = document.getElementById('mov-tipo')?.value || '';
+  return tipo === 'SALIDA' || tipo === 'TRANSFERENCIA';
+}
+
+function getProductosParaMovimientoPicker() {
+  const productos = sortEntitiesByIdAsc(productosData);
+  if (!requiereFiltradoPorBodegaOrigen()) {
+    return productos;
+  }
+  const bodegaOrigenId = getEntityPickerValue('mov-bodega-origen');
+  if (!bodegaOrigenId) return [];
+  return productos.filter((p) => obtenerStockEnBodega(p.id, bodegaOrigenId) > 0);
+}
+
+function formatProductoStockEnBodega(productoId, bodegaId) {
+  const qty = obtenerStockEnBodega(productoId, bodegaId);
+  if (qty <= 0) return 'Sin stock en bodega origen';
+  return `${qty} uds disponibles`;
+}
+
+function updateMovimientoDetalleProductosState() {
+  const requiereOrigen = requiereFiltradoPorBodegaOrigen();
+  const bodegaOrigenId = getEntityPickerValue('mov-bodega-origen');
+  const bloqueado = requiereOrigen && !bodegaOrigenId;
+
+  const hint = document.getElementById('hint-mov-detalle-productos');
+  if (hint) {
+    if (bloqueado) {
+      hint.textContent = 'Selecciona primero la bodega de origen para buscar productos con stock disponible.';
+      hint.classList.remove('hidden');
+      hint.classList.add('picker-hint-warning');
+    } else if (requiereOrigen && bodegaOrigenId) {
+      const bodega = getBodegasParaPicker().find((b) => b.id === bodegaOrigenId);
+      const count = getProductosParaMovimientoPicker().length;
+      hint.textContent = count
+        ? `Mostrando ${count} producto(s) con existencia en ${bodega?.nombre || 'la bodega origen'}.`
+        : `No hay productos con stock en ${bodega?.nombre || 'la bodega origen'}.`;
+      hint.classList.remove('hidden');
+      hint.classList.toggle('picker-hint-warning', count === 0);
+    } else {
+      hint.textContent = '';
+      hint.classList.add('hidden');
+      hint.classList.remove('picker-hint-warning');
+    }
+  }
+
+  document.querySelectorAll('#detalles-container .detalle-row').forEach((row) => {
+    const index = row.dataset.index ?? '0';
+    const prefix = `detalle-producto-${index}`;
+    setEntityPickerDisabled(prefix, bloqueado);
+
+    if (requiereOrigen && bodegaOrigenId) {
+      const productoId = getEntityPickerValue(prefix);
+      if (productoId && obtenerStockEnBodega(productoId, bodegaOrigenId) <= 0) {
+        resetEntityPicker(prefix);
+      }
+    }
+
+    const input = document.getElementById(`${prefix}-input`);
+    if (input) {
+      input.placeholder = bloqueado
+        ? 'Selecciona la bodega de origen…'
+        : (requiereOrigen ? 'Buscar productos con stock en origen…' : 'Buscar producto…');
+    }
+  });
+
+  const btnAdd = document.getElementById('btn-add-detalle');
+  if (btnAdd) btnAdd.disabled = bloqueado;
+
+  if (requiereOrigen) {
+    updateMovimientoBodegaOrigenContext();
+  }
+  refreshAllDetalleStockHints();
+}
+
 function bodegaTieneStockProductosSeleccionados(bodegaId) {
   return getMovimientoProductosSeleccionados().some((pid) => obtenerStockEnBodega(pid, bodegaId) > 0);
+}
+
+function updateMovimientoBodegaFields() {
+  const tipo = document.getElementById('mov-tipo')?.value || '';
+  const grupoOrigen = document.getElementById('grupo-mov-bodega-origen');
+  const grupoDestino = document.getElementById('grupo-mov-bodega-destino');
+  const labelOrigen = document.getElementById('label-mov-bodega-origen');
+  const labelDestino = document.getElementById('label-mov-bodega-destino');
+  const inputOrigen = document.getElementById('mov-bodega-origen-input');
+  const inputDestino = document.getElementById('mov-bodega-destino-input');
+
+  if (!grupoOrigen || !grupoDestino) return;
+
+  const showOrigen = tipo === 'SALIDA' || tipo === 'TRANSFERENCIA';
+  const showDestino = tipo === 'ENTRADA' || tipo === 'TRANSFERENCIA';
+
+  grupoOrigen.classList.toggle('hidden', !showOrigen);
+  grupoDestino.classList.toggle('hidden', !showDestino);
+
+  if (labelOrigen) labelOrigen.textContent = showOrigen ? 'Bodega Origen *' : 'Bodega Origen';
+  if (labelDestino) labelDestino.textContent = showDestino ? 'Bodega Destino *' : 'Bodega Destino';
+
+  if (inputOrigen) {
+    inputOrigen.disabled = !showOrigen;
+    inputOrigen.setAttribute('aria-required', showOrigen ? 'true' : 'false');
+  }
+  if (inputDestino) {
+    inputDestino.disabled = !showDestino;
+    inputDestino.setAttribute('aria-required', showDestino ? 'true' : 'false');
+  }
+
+  if (!showOrigen) resetEntityPicker('mov-bodega-origen');
+  if (!showDestino) resetEntityPicker('mov-bodega-destino');
+
+  if (showOrigen) {
+    updateMovimientoBodegaOrigenContext();
+  } else {
+    const hint = document.getElementById('hint-mov-bodega-origen');
+    hint?.classList.add('hidden');
+  }
+  updateMovimientoDetalleProductosState();
 }
 
 function updateMovimientoBodegaOrigenContext() {
@@ -1670,6 +1803,9 @@ function updateMovimientoBodegaOrigenContext() {
   const input = document.getElementById('mov-bodega-origen-input');
   const productoIds = getMovimientoProductosSeleccionados();
   if (!hint || !input) return;
+
+  const grupoOrigen = document.getElementById('grupo-mov-bodega-origen');
+  if (grupoOrigen?.classList.contains('hidden')) return;
 
   if (!productoIds.length) {
     hint.textContent = '';
@@ -1737,7 +1873,7 @@ function refreshAllDetalleStockHints() {
 }
 
 function getProveedoresParaPicker() {
-  return proveedoresData || [];
+  return sortEntitiesByIdAsc(proveedoresData);
 }
 
 function openProveedorRapidoModal(nombrePrefill) {
@@ -1752,7 +1888,7 @@ function openProveedorRapidoModal(nombrePrefill) {
 
 async function crearProveedorRapido(body) {
   const creado = await apiFetch('/api/proveedores', { method: 'POST', body: JSON.stringify(body) });
-  proveedoresData = [...(proveedoresData || []).filter((p) => p.id !== creado.id), creado];
+  proveedoresData = sortEntitiesByIdAsc([...(proveedoresData || []).filter((p) => p.id !== creado.id), creado]);
   return creado;
 }
 
@@ -1839,8 +1975,12 @@ function registerMovimientoModalPickers() {
       const productoIds = getMovimientoProductosSeleccionados();
       return productoIds.length ? getBodegasOrigenPriorizadas() : [];
     },
-    onSelect: () => refreshAllDetalleStockHints(),
-    onClear: () => refreshAllDetalleStockHints(),
+    onSelect: () => {
+      updateMovimientoDetalleProductosState();
+    },
+    onClear: () => {
+      updateMovimientoDetalleProductosState();
+    },
   });
   registerEntityPicker('mov-bodega-destino', {
     getItems: getBodegasParaPicker,
@@ -1852,12 +1992,27 @@ function registerMovimientoModalPickers() {
 function registerDetalleProductoPicker(index) {
   const prefix = `detalle-producto-${index}`;
   registerEntityPicker(prefix, {
-    getItems: () => productosData,
+    getItems: getProductosParaMovimientoPicker,
     getLabel: (p) => p.nombre,
-    getSearchText: (p) => `${p.nombre} ${p.id} ${p.categoria || ''} ${formatProductoInventarioLine(p.id)}`,
+    getSearchText: (p) => {
+      const bodegaOrigenId = getEntityPickerValue('mov-bodega-origen');
+      const stockLine = requiereFiltradoPorBodegaOrigen() && bodegaOrigenId
+        ? formatProductoStockEnBodega(p.id, bodegaOrigenId)
+        : formatProductoInventarioLine(p.id);
+      return `${p.nombre} ${p.id} ${p.categoria || ''} ${stockLine}`;
+    },
     getOptionLabel: (p) => {
+      const bodegaOrigenId = getEntityPickerValue('mov-bodega-origen');
+      if (requiereFiltradoPorBodegaOrigen() && bodegaOrigenId) {
+        return `${p.nombre} — ${formatProductoStockEnBodega(p.id, bodegaOrigenId)}`;
+      }
       const stockLine = formatProductoInventarioLine(p.id);
       return stockLine === 'Sin stock en bodegas' ? p.nombre : `${p.nombre} — ${stockLine}`;
+    },
+    getItemsOnEmptyFocus: () => {
+      if (!requiereFiltradoPorBodegaOrigen()) return [];
+      const bodegaOrigenId = getEntityPickerValue('mov-bodega-origen');
+      return bodegaOrigenId ? getProductosParaMovimientoPicker() : [];
     },
     onSelect: () => {
       updateMovimientoBodegaOrigenContext();
@@ -1917,10 +2072,10 @@ async function ensureMovimientoModalData() {
     tasks.push(populateUsuariosAutocomplete());
   }
   if (!bodegasCache.length && !bodegasData.length) {
-    tasks.push(apiFetch('/api/bodegas').then((data) => { bodegasCache = data || []; }).catch(() => {}));
+    tasks.push(apiFetch('/api/bodegas').then((data) => { bodegasCache = sortEntitiesByIdAsc(data || []); }).catch(() => {}));
   }
   if (!productosData.length) {
-    tasks.push(apiFetch('/api/productos').then((data) => { productosData = data || []; }).catch(() => {}));
+    tasks.push(apiFetch('/api/productos').then((data) => { productosData = sortEntitiesByIdAsc(data || []); }).catch(() => {}));
   }
   tasks.push(loadInventarioMovimientoCache());
   if (tasks.length) await Promise.all(tasks);
@@ -2136,7 +2291,7 @@ async function populateFiltroBodegasMovimiento() {
   const select = document.getElementById('filter-bodega-movimiento');
   if (!select) return;
   try {
-    const bodegas = bodegasCache.length ? bodegasCache : (await apiFetch('/api/bodegas') || []);
+    const bodegas = bodegasCache.length ? bodegasCache : sortEntitiesByIdAsc(await apiFetch('/api/bodegas') || []);
     if (!bodegasCache.length) bodegasCache = bodegas;
     fillSelectOptions(
       select,
@@ -2321,12 +2476,12 @@ document.getElementById('btn-nuevo-movimiento')?.addEventListener('click', async
   resetEntityPicker('mov-bodega-origen');
   resetEntityPicker('mov-bodega-destino');
   resetDetallesContainer();
-  updateMovimientoBodegaOrigenContext();
+  updateMovimientoBodegaFields();
   document.getElementById('movimiento-error').classList.add('hidden');
   openModal('modal-movimiento');
 });
 
-document.getElementById('mov-tipo')?.addEventListener('change', refreshAllDetalleStockHints);
+document.getElementById('mov-tipo')?.addEventListener('change', updateMovimientoBodegaFields);
 
 document.getElementById('btn-add-detalle')?.addEventListener('click', () => {
   const container = document.getElementById('detalles-container');
@@ -2336,6 +2491,7 @@ document.getElementById('btn-add-detalle')?.addEventListener('click', () => {
   const row = div.firstElementChild;
   container.appendChild(row);
   initDetalleRow(row, idx);
+  updateMovimientoDetalleProductosState();
 });
 
 function removeDetalle(btn) {
@@ -2366,6 +2522,29 @@ document.getElementById('form-movimiento')?.addEventListener('submit', async (e)
   if (!usuarioId) {
     showModalError('movimiento-error', 'Selecciona un usuario válido desde el buscador.');
     return;
+  }
+
+  if (tipo === 'ENTRADA' && !bodegaDestinoId) {
+    showModalError('movimiento-error', 'Selecciona la bodega destino.');
+    return;
+  }
+  if (tipo === 'SALIDA' && !bodegaOrigenId) {
+    showModalError('movimiento-error', 'Selecciona la bodega origen.');
+    return;
+  }
+  if (tipo === 'TRANSFERENCIA') {
+    if (!bodegaOrigenId) {
+      showModalError('movimiento-error', 'Selecciona la bodega origen.');
+      return;
+    }
+    if (!bodegaDestinoId) {
+      showModalError('movimiento-error', 'Selecciona la bodega destino.');
+      return;
+    }
+    if (bodegaOrigenId === bodegaDestinoId) {
+      showModalError('movimiento-error', 'La bodega de origen y destino no pueden ser la misma.');
+      return;
+    }
   }
 
   const detalleRows = document.querySelectorAll('#detalles-container .detalle-row');
@@ -2421,8 +2600,14 @@ document.getElementById('form-movimiento')?.addEventListener('submit', async (e)
     usuario: { id: usuarioId },
     detalles,
   };
-  if (bodegaOrigenId) body.bodegaOrigen = { id: bodegaOrigenId };
-  if (bodegaDestinoId) body.bodegaDestino = { id: bodegaDestinoId };
+  if (tipo === 'ENTRADA') {
+    body.bodegaDestino = { id: bodegaDestinoId };
+  } else if (tipo === 'SALIDA') {
+    body.bodegaOrigen = { id: bodegaOrigenId };
+  } else if (tipo === 'TRANSFERENCIA') {
+    body.bodegaOrigen = { id: bodegaOrigenId };
+    body.bodegaDestino = { id: bodegaDestinoId };
+  }
 
   setModalLoading('btn-save-movimiento', true);
   try {
@@ -2492,7 +2677,7 @@ async function initReportes() {
       apiFetch('/api/bodegas'),
       apiFetch('/api/productos'),
     ]);
-    bodegasCache = bodegas || bodegasCache;
+    bodegasCache = sortEntitiesByIdAsc(bodegas || bodegasCache);
 
     fillSelectOptions(
       document.getElementById('reporte-bodega'),

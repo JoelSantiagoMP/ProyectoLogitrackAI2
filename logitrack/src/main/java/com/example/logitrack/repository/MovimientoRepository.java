@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -14,6 +15,18 @@ import java.util.List;
 public interface MovimientoRepository extends JpaRepository<Movimiento, Long> {
 
     List<Movimiento> findByFechaBetween(LocalDateTime fechaInicio, LocalDateTime fechaFin);
+
+    List<Movimiento> findByFechaGreaterThanEqualAndFechaLessThan(LocalDateTime fechaInicio, LocalDateTime fechaFin);
+
+    @Query(value = """
+            SELECT m.*
+            FROM logitrack.movimiento m
+            WHERE CAST(((m.fecha AT TIME ZONE 'UTC') AT TIME ZONE 'America/Bogota') AS date) >= :desde
+              AND CAST(((m.fecha AT TIME ZONE 'UTC') AT TIME ZONE 'America/Bogota') AS date) < :hasta
+            """, nativeQuery = true)
+    List<Movimiento> findByFechaCalendarioBogota(
+            @Param("desde") LocalDate desde,
+            @Param("hasta") LocalDate hasta);
 
     List<Movimiento> findByTipoMovimiento(TipoMovimiento tipoMovimiento);
 

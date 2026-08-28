@@ -947,8 +947,8 @@
           </div>
         </div>
         <div class="form-row">
-          <div class="form-group">
-            <label for="mov-bodega-origen-input">Bodega Origen</label>
+          <div class="form-group" id="grupo-mov-bodega-origen">
+            <label for="mov-bodega-origen-input" id="label-mov-bodega-origen">Bodega Origen</label>
             <div class="entity-picker autocomplete" id="mov-bodega-origen-picker" data-entity-picker="mov-bodega-origen">
               <input type="hidden" id="mov-bodega-origen-id" />
               <div class="autocomplete-chip hidden" id="mov-bodega-origen-chip">
@@ -962,8 +962,8 @@
             </div>
             <small id="hint-mov-bodega-origen" class="picker-context-hint hidden" style="color:var(--clr-txt-muted);display:block;margin-top:.35rem"></small>
           </div>
-          <div class="form-group">
-            <label for="mov-bodega-destino-input">Bodega Destino</label>
+          <div class="form-group" id="grupo-mov-bodega-destino">
+            <label for="mov-bodega-destino-input" id="label-mov-bodega-destino">Bodega Destino</label>
             <div class="entity-picker autocomplete" id="mov-bodega-destino-picker" data-entity-picker="mov-bodega-destino">
               <input type="hidden" id="mov-bodega-destino-id" />
               <div class="autocomplete-chip hidden" id="mov-bodega-destino-chip">
@@ -979,6 +979,7 @@
         </div>
         <div class="form-group">
           <label>Detalle de Productos</label>
+          <small id="hint-mov-detalle-productos" class="picker-context-hint hidden" style="color:var(--clr-txt-muted);display:block;margin-bottom:.5rem"></small>
           <div id="detalles-container">
             <div class="detalle-row" data-index="0">
               <div class="detalle-producto-col">

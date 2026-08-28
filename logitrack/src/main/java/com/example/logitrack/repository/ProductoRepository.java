@@ -13,7 +13,9 @@ public interface ProductoRepository extends JpaRepository<Producto, Long> {
 
     boolean existsByNombre(String nombre);
 
-    List<Producto> findByCategoriaIgnoreCase(String categoria);
+    List<Producto> findAllByOrderByIdAsc();
+
+    List<Producto> findByCategoriaIgnoreCaseOrderByIdAsc(String categoria);
 
     @Query("SELECT ib.producto FROM InventarioBodega ib GROUP BY ib.producto HAVING SUM(ib.cantidad) < :limite")
     List<Producto> findByStockLessThanCustom(@Param("limite") int limite);

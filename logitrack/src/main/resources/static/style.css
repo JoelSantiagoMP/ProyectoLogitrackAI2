@@ -1071,6 +1071,16 @@ img { max-width: 100%; }
 .recent-item-sub   { font-size: 0.73rem; color: var(--clr-txt-muted); }
 .recent-item-right { font-size: 0.73rem; color: var(--clr-txt-muted); white-space: nowrap; }
 
+.entity-picker.is-disabled .autocomplete-input-wrap input {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background: var(--clr-bg-subtle, #f5f4f2);
+}
+.entity-picker.is-disabled .autocomplete-chip-clear {
+  pointer-events: none;
+  opacity: 0.5;
+}
+
 /* ---------- DETALLE ROW (movimiento) ---------- */
 .detalle-row {
   display: grid;
@@ -1261,6 +1271,7 @@ img { max-width: 100%; }
 .ayer-chip small { color: var(--clr-txt-muted); }
 .ocupacion-row { margin-bottom: 0.85rem; }
 .ocupacion-head { display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 0.35rem; }
+.ocupacion-sub { font-size: 0.75rem; color: var(--clr-txt-muted); margin-bottom: 0.35rem; }
 .ocupacion-bar {
   height: 8px;
   background: var(--clr-border);

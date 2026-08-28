@@ -82,15 +82,16 @@ public class IndicadoresInventarioService {
     public Map<String, Object> obtenerKpis() {
         OffsetDateTime calculadoEn = OffsetDateTime.now(ZONA_BOGOTA);
         List<Map<String, Object>> ocupacion = new ArrayList<>();
-        for (Bodega bodega : bodegaRepository.findAll()) {
+        for (Bodega bodega : bodegaRepository.findAllByOrderByIdAsc()) {
             int unidades = stockAlmacenadoEnBodega(bodega.getId());
-            double porcentaje = bodega.getCapacidad() == null || bodega.getCapacidad() == 0
-                    ? 0.0
-                    : (unidades * 100.0) / bodega.getCapacidad();
-            ocupacion.add(Map.of(
-                    "bodegaId", bodega.getId(),
-                    "nombre", bodega.getNombre(),
-                    "porcentaje", porcentaje));
+            double porcentaje = calcularPorcentajeOcupacion(unidades, bodega.getCapacidad());
+            Map<String, Object> fila = new LinkedHashMap<>();
+            fila.put("bodegaId", bodega.getId());
+            fila.put("nombre", bodega.getNombre());
+            fila.put("porcentaje", porcentaje);
+            fila.put("unidades", unidades);
+            fila.put("capacidad", bodega.getCapacidad());
+            ocupacion.add(fila);
         }
 
         int quiebre = 0;
@@ -113,9 +114,7 @@ public class IndicadoresInventarioService {
         ordenesPorAprobar.put("montoTotal", monto);
 
         LocalDate ayer = LocalDate.now(ZONA_BOGOTA).minusDays(1);
-        LocalDateTime inicioAyer = ayer.atStartOfDay();
-        LocalDateTime finAyer = ayer.plusDays(1).atStartOfDay();
-        List<Movimiento> deAyer = movimientoRepository.findByFechaBetween(inicioAyer, finAyer.minusNanos(1));
+        List<Movimiento> deAyer = movimientosEnRangoCalendarioBogota(ayer, ayer.plusDays(1));
         long entrada = deAyer.stream().filter(m -> m.getTipoMovimiento() == TipoMovimiento.ENTRADA).count();
         long salida = deAyer.stream().filter(m -> m.getTipoMovimiento() == TipoMovimiento.SALIDA).count();
         long transferencia = deAyer.stream().filter(m -> m.getTipoMovimiento() == TipoMovimiento.TRANSFERENCIA).count();
@@ -124,6 +123,7 @@ public class IndicadoresInventarioService {
         movimientosAyer.put("entrada", entrada);
         movimientosAyer.put("salida", salida);
         movimientosAyer.put("transferencia", transferencia);
+        movimientosAyer.put("fechaReferencia", ayer.toString());
 
         Map<String, Object> kpis = new LinkedHashMap<>();
         kpis.put("calculadoEn", calculadoEn);
@@ -142,7 +142,7 @@ public class IndicadoresInventarioService {
                         "Producto no encontrado con el id: " + productoId));
         int total = stockTotalProducto(productoId);
         List<Map<String, Object>> porBodega = new ArrayList<>();
-        for (Bodega bodega : bodegaRepository.findAll()) {
+        for (Bodega bodega : bodegaRepository.findAllByOrderByIdAsc()) {
             porBodega.add(Map.of(
                     "bodegaId", bodega.getId(),
                     "nombre", bodega.getNombre(),
@@ -189,12 +189,12 @@ public class IndicadoresInventarioService {
     @Transactional(readOnly = true)
     public List<Map<String, Object>> listarBodegasCriticas() {
         List<Map<String, Object>> criticas = new ArrayList<>();
-        for (Bodega bodega : bodegaRepository.findAll()) {
+        for (Bodega bodega : bodegaRepository.findAllByOrderByIdAsc()) {
             int unidades = stockAlmacenadoEnBodega(bodega.getId());
             if (bodega.getCapacidad() == null || bodega.getCapacidad() == 0) {
                 continue;
             }
-            double porcentaje = (unidades * 100.0) / bodega.getCapacidad();
+            double porcentaje = calcularPorcentajeOcupacion(unidades, bodega.getCapacidad());
             if (porcentaje >= 90.0) {
                 Map<String, Object> fila = new LinkedHashMap<>();
                 fila.put("bodegaId", bodega.getId());
@@ -209,7 +209,7 @@ public class IndicadoresInventarioService {
     }
 
     public Long sugerirBodegaDestinoId(Long productoId) {
-        List<Bodega> bodegas = bodegaRepository.findAll();
+        List<Bodega> bodegas = bodegaRepository.findAllByOrderByIdAsc();
         if (bodegas.isEmpty()) {
             return null;
         }
@@ -225,10 +225,9 @@ public class IndicadoresInventarioService {
     public double consumoDiarioPromedio(Long productoId) {
         LocalDate hoy = LocalDate.now(ZONA_BOGOTA);
         LocalDate desde = hoy.minusDays(29);
-        LocalDateTime inicio = desde.atStartOfDay();
-        LocalDateTime finExclusivo = hoy.plusDays(1).atStartOfDay();
+        LocalDate hastaExclusivo = hoy.plusDays(1);
         long unidades = 0;
-        for (Movimiento movimiento : movimientoRepository.findByFechaBetween(inicio, finExclusivo.minusNanos(1))) {
+        for (Movimiento movimiento : movimientosEnRangoCalendarioBogota(desde, hastaExclusivo)) {
             if (movimiento.getTipoMovimiento() != TipoMovimiento.SALIDA) {
                 continue;
             }
@@ -274,14 +273,24 @@ public class IndicadoresInventarioService {
     }
 
     private int stockAlmacenadoEnBodega(Long bodegaId) {
-        return inventarioBodegaRepository.findByBodegaId(bodegaId).stream()
-                .mapToInt(i -> i.getCantidad() != null ? i.getCantidad() : 0)
-                .sum();
+        Integer total = inventarioBodegaRepository.obtenerStockTotalPorBodega(bodegaId);
+        return total != null ? total : 0;
+    }
+
+    double calcularPorcentajeOcupacion(int unidades, Integer capacidad) {
+        if (capacidad == null || capacidad <= 0) {
+            return 0.0;
+        }
+        return (unidades * 100.0) / capacidad;
+    }
+
+    private List<Movimiento> movimientosEnRangoCalendarioBogota(LocalDate desdeInclusive, LocalDate hastaExclusive) {
+        return movimientoRepository.findByFechaCalendarioBogota(desdeInclusive, hastaExclusive);
     }
 
     private int stockTotalDesdeMovimientos(Long productoId) {
         Map<Long, Integer> porBodega = new HashMap<>();
-        for (Bodega bodega : bodegaRepository.findAll()) {
+        for (Bodega bodega : bodegaRepository.findAllByOrderByIdAsc()) {
             porBodega.put(bodega.getId(), stockEnBodegaDesdeMovimientos(productoId, bodega.getId()));
         }
         return porBodega.values().stream().mapToInt(Integer::intValue).sum();

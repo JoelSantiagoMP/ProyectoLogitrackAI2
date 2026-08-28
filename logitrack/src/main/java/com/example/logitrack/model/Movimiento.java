@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotNull;
 import lombok.*;
 
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -50,7 +51,7 @@ public class Movimiento {
     @PrePersist
     protected void onCreate() {
         if (this.fecha == null) {
-            this.fecha = LocalDateTime.now();
+            this.fecha = LocalDateTime.now(ZoneOffset.UTC);
         }
     }
 }
