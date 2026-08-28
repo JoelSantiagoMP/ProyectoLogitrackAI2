@@ -61,7 +61,7 @@ Cuando el documento del reto dice **debe**, es obligatorio y se califica.
 - Pruebas de reglas nuevas escritas **antes** de implementar esas reglas, más al menos una prueba de integración.
 - Documentación SDD en `docs/sdd/` y evidencia TDD.
 - Zona horaria `America/Bogota` en backend, n8n y datos de prueba.
-- Fuente de verdad: backend y base de datos. Dashboard, MCP y n8n consultan o usan la API; **no** calculan ni modifican datos directamente en MySQL.
+- Fuente de verdad: backend y base de datos (PostgreSQL en este repo). Dashboard, MCP y n8n consultan o usan la API; **no** calculan ni modifican datos directamente en la BD.
 
 ## Fuera de alcance
 

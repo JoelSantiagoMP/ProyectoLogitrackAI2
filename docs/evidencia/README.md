@@ -2,6 +2,8 @@
 
 Evidencias generadas el **2026-08-25** con backend (`:8080`), MCP (`:3100`) y API reales.
 
+Documentación general del proyecto: [`../README.md`](../README.md) · Alineación PDF: [`../alineacion-requisitos-pdf.md`](../alineacion-requisitos-pdf.md).
+
 ## Regenerar capturas
 
 ```bash

@@ -100,7 +100,7 @@ Tras el login, el frontend guarda el JWT en `sessionStorage` y lo envía en `Aut
 
 Extensión del reto IA2: KPIs, productos en riesgo, órdenes de compra, panel operativo, PDF y rol `AGENTE`.
 
-Documentación SDD: [`../docs/sdd/`](../docs/sdd/). Diagrama: [`../docs/diagrama-arquitectura.md`](../docs/diagrama-arquitectura.md).
+Documentación: [`../docs/README.md`](../docs/README.md) · SDD: [`../docs/sdd/`](../docs/sdd/) · Alineación PDF: [`../docs/alineacion-requisitos-pdf.md`](../docs/alineacion-requisitos-pdf.md) · Código: [`../docs/arquitectura-codigo.md`](../docs/arquitectura-codigo.md) · UI: [`../docs/frontend-dashboard.md`](../docs/frontend-dashboard.md).
 
 ### Endpoints IQ (JWT requerido)
 

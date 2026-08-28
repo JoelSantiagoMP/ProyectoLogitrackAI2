@@ -10,7 +10,8 @@ Casillas según el proceso SDD/TDD del reto. Las pruebas de reglas nuevas se esc
 - [x] Commit SDD inicial (`e38bcbc`; mensaje equivalente al exigido)
 - [x] README: instalación, ejecución, usuarios de prueba, rutas principales (ver `logitrack/README.md`)
 - [x] Swagger/OpenAPI de endpoints nuevos y evidencia de endpoints protegidos
-- [x] Diagrama n8n → MCP → API Spring Boot → MySQL → dashboard (`docs/diagrama-arquitectura.md`)
+- [x] Diagrama n8n → MCP → API Spring Boot → PostgreSQL → dashboard (`docs/diagrama-arquitectura.md`)
+- [x] Documentación ampliada: alineación PDF, wireframes, frontend responsive, mapa de código (`docs/README.md`)
 
 ## B. Modelo, reglas y pruebas (criterio 1) — TDD
 
@@ -68,7 +69,8 @@ Casillas según el proceso SDD/TDD del reto. Las pruebas de reglas nuevas se esc
 
 ## E. Dashboard y PDF (criterio 4)
 
-- [x] Dashboard HTML/CSS/JS sin framework (`logitrack/src/main/resources/static/`)
+- [x] Dashboard HTML/CSS/JS sin framework (`logitrack/src/main/resources/static/`; índice `frontend/README.md`)
+- [x] Diseño responsive documentado (1024/768/480 px, tablas con scroll) — `docs/frontend-dashboard.md`
 - [x] Login JWT reutilizado; token solo en `sessionStorage`
 - [x] Cuatro indicadores, ocupación por bodega, movimientos de ayer
 - [x] Narrativa, alertas y acciones del último resumen

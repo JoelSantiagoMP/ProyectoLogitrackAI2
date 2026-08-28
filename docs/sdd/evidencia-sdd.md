@@ -9,6 +9,11 @@ Esta carpeta certifica de forma verificable el uso de SDD y TDD.
 - [03 — Diseño](03-diseno.md)
 - [04 — Tareas](04-tareas.md)
 - [Diagrama de arquitectura](../diagrama-arquitectura.md)
+- [Índice de documentación](../README.md)
+- [Alineación requisitos PDF](../alineacion-requisitos-pdf.md)
+- [Wireframes](../wireframes.md)
+- [Dashboard y responsive](../frontend-dashboard.md)
+- [Arquitectura en código](../arquitectura-codigo.md)
 - [Evidencia operativa (MCP, n8n, PDF)](../evidencia/README.md)
 
 ## Commits obligatorios (en este orden)
@@ -79,4 +84,4 @@ Log completo: `logitrack/target/surefire-reports/` (generado al ejecutar `./mvnw
 
 ## Reflexión (máximo 150 palabras)
 
-Se mantuvo la estructura del backend anterior con prefijo `/api/` y se añadieron alias sin prefijo para rutas IQ (`/productos`, `/bodegas`, `/kpis`, `/ordenes`, `/panel`). El stock operativo sigue materializándose en `inventario_bodega` al registrar movimientos, coherente con el reto previo. Los nombres de las tools MCP se alinearon con el PDF (`consultar_*`, `publicar_resumen`). El dashboard vive en `logitrack/src/main/resources/static/` en lugar de una carpeta `frontend/` en la raíz; el comportamiento exigido (KPIs, riesgo, PDF BORRADOR, botón Aprobar solo ADMIN) está implementado ahí.
+Se mantuvo la estructura del backend anterior con prefijo `/api/` y se añadieron alias sin prefijo para rutas IQ. El stock operativo sigue materializándose en `inventario_bodega` al registrar movimientos. Los nombres de las tools MCP se alinearon con el PDF. El dashboard vive en `static/` en lugar de `frontend/` en la raíz; la carpeta `frontend/README.md` y `docs/frontend-dashboard.md` documentan esa decisión y el comportamiento responsive. La BD es PostgreSQL, no MySQL, con scripts equivalentes en `database/`.

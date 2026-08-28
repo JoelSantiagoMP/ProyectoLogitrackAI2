@@ -2,7 +2,7 @@
 
 Zona horaria de backend, n8n y datos de prueba: **`America/Bogota`**.
 
-Fuente de verdad: el backend y su base de datos. Dashboard, MCP y n8n no calculan ni modifican datos en MySQL.
+Fuente de verdad: el backend y su base de datos (PostgreSQL en este proyecto). Dashboard, MCP y n8n no calculan ni modifican datos en la BD directamente.
 
 ## 1. Reglas base de inventario
 
@@ -286,3 +286,34 @@ HTML, CSS y JavaScript sin framework. Debe:
 8. PDF de orden en `BORRADOR`: se guarda y contiene la marca de agua; al cambiar el estado, ya no queda disponible hasta generarlo de nuevo.
 
 Al menos una prueba de integración para `PATCH /ordenes/{id}/estado` o `POST /panel/resumen`.
+
+---
+
+## 13. Mapa de implementación (estado actual del código)
+
+Esta sección enlaza cada bloque de la especificación con su ubicación en el repositorio. Detalle ampliado: [`../alineacion-requisitos-pdf.md`](../alineacion-requisitos-pdf.md) y [`../arquitectura-codigo.md`](../arquitectura-codigo.md).
+
+| Bloque especificación | Servicio / componente principal | Archivo |
+| --- | --- | --- |
+| Reglas inventario y KPIs | `IndicadoresInventarioService` | `logitrack/.../service/IndicadoresInventarioService.java` |
+| Productos en riesgo / stock | idem + `ProductoController` | `controller/ProductoController.java` |
+| Bodegas críticas | idem + `BodegaController` | `controller/BodegaController.java` |
+| Órdenes y transiciones | `OrdenCompraService` | `service/OrdenCompraService.java` |
+| PDF orden | `OrdenPdfService` | `service/OrdenPdfService.java` |
+| Panel resumen | `PanelResumenService` | `service/PanelResumenService.java` |
+| Seguridad AGENTE/ADMIN | `SecurityConfig` | `security/SecurityConfig.java` |
+| Dashboard (consumo API) | `loadDashboard`, `renderKpis`, etc. | `static/app.js` |
+| MCP 6 tools | FastMCP | `mcp-server/main.py` |
+| Flujo n8n | Workflow exportado | `n8n/resumen-diario-inventario.json` |
+| Datos reproducibles | SQL | `logitrack/database/schema.sql`, `data.sql` |
+
+### Pruebas (paquete `iq` y unitarias)
+
+| Regla §12 | Clase de prueba |
+| --- | --- |
+| 1–2 | `IndicadoresInventarioServiceTest` |
+| 3–6, 8–9 | `OrdenCompraEstadoTest` |
+| 7, 9 | `PanelResumenTest` |
+| 8 (unitario PDF) | `OrdenPdfServiceTest` |
+
+Trazabilidad completa: [`evidencia-sdd.md`](evidencia-sdd.md).

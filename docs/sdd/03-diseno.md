@@ -153,4 +153,15 @@ README.md
 schema.sql / data.sql (o equivalente reproducible)
 ```
 
-La estructura exacta puede adaptarse al proyecto anterior (`logitrack/` + `static/`) siempre que las responsabilidades estén separadas de forma clara. El reto pide dashboard en `frontend/`; se puede servir o copiar desde ahí sin mezclar reglas de inventario en el cliente.
+La estructura exacta puede adaptarse al proyecto anterior (`logitrack/` + `static/`) siempre que las responsabilidades estén separadas de forma clara. El reto pide dashboard en `frontend/`; en este repositorio el código UI está en `logitrack/src/main/resources/static/` y la carpeta raíz `frontend/` documenta esa decisión ([`../../frontend/README.md`](../../frontend/README.md)).
+
+## Wireframes y UI
+
+Bocetos de pantallas IQ (login, dashboard, órdenes, flujos n8n y responsive):
+
+- [`../wireframes.md`](../wireframes.md)
+- [`../frontend-dashboard.md`](../frontend-dashboard.md) — breakpoints 1024 / 768 / 480 px y checklist de verificación
+
+## Mapa de código
+
+Servicios, controladores y pruebas por capa: [`../arquitectura-codigo.md`](../arquitectura-codigo.md).
