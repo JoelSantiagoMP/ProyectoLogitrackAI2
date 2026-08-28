@@ -2,6 +2,9 @@ package com.example.logitrack.controller;
 
 import com.example.logitrack.dto.JwtAuthResponse;
 import com.example.logitrack.dto.LoginRequest;
+import com.example.logitrack.exception.ResourceNotFoundException;
+import com.example.logitrack.model.Usuario;
+import com.example.logitrack.repository.UsuarioRepository;
 import com.example.logitrack.security.JwtTokenProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -19,10 +22,13 @@ public class AuthController {
 
     private final AuthenticationManager authenticationManager;
     private final JwtTokenProvider tokenProvider;
+    private final UsuarioRepository usuarioRepository;
 
-    public AuthController(AuthenticationManager authenticationManager, JwtTokenProvider tokenProvider) {
+    public AuthController(AuthenticationManager authenticationManager, JwtTokenProvider tokenProvider,
+            UsuarioRepository usuarioRepository) {
         this.authenticationManager = authenticationManager;
         this.tokenProvider = tokenProvider;
+        this.usuarioRepository = usuarioRepository;
     }
 
     @PostMapping("/login")
@@ -40,8 +46,11 @@ public class AuthController {
             // 3. Fabricamos el token JWT
             String token = tokenProvider.generarToken(authentication);
 
-            // 4. Se lo enviamos al usuario en formato JSON
-            return ResponseEntity.ok(new JwtAuthResponse(token));
+            Usuario usuario = usuarioRepository.findByUsername(loginDto.getUsername())
+                    .orElseThrow(() -> new ResourceNotFoundException(
+                            "Usuario no encontrado: " + loginDto.getUsername()));
+
+            return ResponseEntity.ok(new JwtAuthResponse(token, usuario.getUsername(), usuario.getRol().name()));
 
         } catch (Exception e) {
             // Imprime la traza completa del error en la consola de tu IDE

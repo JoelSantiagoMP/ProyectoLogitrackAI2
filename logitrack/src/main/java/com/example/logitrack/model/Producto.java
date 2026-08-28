@@ -26,8 +26,14 @@ public class Producto {
     @Transient
     private Integer stock = 0;
 
+    @Transient
+    private Long bodegaId;
+
+    @Transient
+    private String bodegaNombre;
+
     @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "proveedor_principal_id")
+    @JoinColumn(name = "proveedor_id")
     private Proveedor proveedorPrincipal;
 
     public Producto() {
@@ -71,6 +77,22 @@ public class Producto {
 
     public void setStock(Integer stock) {
         this.stock = stock;
+    }
+
+    public Long getBodegaId() {
+        return bodegaId;
+    }
+
+    public void setBodegaId(Long bodegaId) {
+        this.bodegaId = bodegaId;
+    }
+
+    public String getBodegaNombre() {
+        return bodegaNombre;
+    }
+
+    public void setBodegaNombre(String bodegaNombre) {
+        this.bodegaNombre = bodegaNombre;
     }
 
     public Proveedor getProveedorPrincipal() {

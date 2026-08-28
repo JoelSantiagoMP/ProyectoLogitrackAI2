@@ -29,12 +29,12 @@ CREATE TABLE IF NOT EXISTS bodega (
     CONSTRAINT capacidad_check CHECK (capacidad > 0)
 );
 
-CREATE TABLE IF NOT EXISTS proveedor (
+CREATE TABLE IF NOT EXISTS proveedores (
     id BIGSERIAL PRIMARY KEY,
     nombre VARCHAR(150) NOT NULL,
-    contacto VARCHAR(150),
+    email VARCHAR(150),
     dias_entrega INTEGER NOT NULL,
-    CONSTRAINT proveedor_dias_entrega_check CHECK (dias_entrega BETWEEN 1 AND 90)
+    CONSTRAINT proveedores_dias_entrega_check CHECK (dias_entrega BETWEEN 1 AND 90)
 );
 
 CREATE TABLE IF NOT EXISTS producto (
@@ -42,9 +42,9 @@ CREATE TABLE IF NOT EXISTS producto (
     nombre VARCHAR(150) NOT NULL UNIQUE,
     categoria VARCHAR(100),
     precio DECIMAL(10, 2) NOT NULL,
-    proveedor_principal_id BIGINT,
+    proveedor_id BIGINT,
     CONSTRAINT precio_check CHECK (precio >= 0),
-    CONSTRAINT fk_producto_proveedor FOREIGN KEY (proveedor_principal_id) REFERENCES proveedor(id)
+    CONSTRAINT fk_producto_proveedor FOREIGN KEY (proveedor_id) REFERENCES proveedores(id)
 );
 
 CREATE TABLE IF NOT EXISTS inventario_bodega (
@@ -110,7 +110,7 @@ CREATE TABLE IF NOT EXISTS orden_compra (
     CONSTRAINT orden_cantidad_check CHECK (cantidad > 0),
     CONSTRAINT orden_estado_check CHECK (estado IN ('BORRADOR', 'APROBADA', 'RECIBIDA', 'CANCELADA')),
     CONSTRAINT fk_orden_producto FOREIGN KEY (producto_id) REFERENCES producto(id),
-    CONSTRAINT fk_orden_proveedor FOREIGN KEY (proveedor_id) REFERENCES proveedor(id),
+    CONSTRAINT fk_orden_proveedor FOREIGN KEY (proveedor_id) REFERENCES proveedores(id),
     CONSTRAINT fk_orden_bodega FOREIGN KEY (bodega_destino_id) REFERENCES bodega(id),
     CONSTRAINT fk_orden_autor FOREIGN KEY (creado_por_id) REFERENCES usuario(id)
 );
@@ -134,7 +134,7 @@ ALTER TABLE logitrack.usuario
 
 ALTER TABLE logitrack.auditoria ADD COLUMN IF NOT EXISTS entidad_id BIGINT;
 
-ALTER TABLE logitrack.producto ADD COLUMN IF NOT EXISTS proveedor_principal_id BIGINT;
+ALTER TABLE logitrack.producto ADD COLUMN IF NOT EXISTS proveedor_id BIGINT;
 DO $$
 BEGIN
     IF NOT EXISTS (
@@ -142,7 +142,7 @@ BEGIN
     ) THEN
         ALTER TABLE logitrack.producto
             ADD CONSTRAINT fk_producto_proveedor
-            FOREIGN KEY (proveedor_principal_id) REFERENCES logitrack.proveedor(id);
+            FOREIGN KEY (proveedor_id) REFERENCES logitrack.proveedores(id);
     END IF;
 END $$;
 
@@ -184,13 +184,13 @@ ON CONFLICT (username) DO UPDATE SET
     rol = EXCLUDED.rol,
     password = EXCLUDED.password;
 
-INSERT INTO proveedor (nombre, contacto, dias_entrega)
+INSERT INTO proveedores (nombre, email, dias_entrega)
 SELECT 'Proveedor Andina SAS', 'compras@andina.test', 10
-WHERE NOT EXISTS (SELECT 1 FROM proveedor WHERE nombre = 'Proveedor Andina SAS');
+WHERE NOT EXISTS (SELECT 1 FROM proveedores WHERE nombre = 'Proveedor Andina SAS');
 
-INSERT INTO proveedor (nombre, contacto, dias_entrega)
+INSERT INTO proveedores (nombre, email, dias_entrega)
 SELECT 'Suministros Caribe Ltda', 'ventas@caribe.test', 7
-WHERE NOT EXISTS (SELECT 1 FROM proveedor WHERE nombre = 'Suministros Caribe Ltda');
+WHERE NOT EXISTS (SELECT 1 FROM proveedores WHERE nombre = 'Suministros Caribe Ltda');
 
 INSERT INTO bodega (nombre, ubicacion, capacidad, encargado)
 SELECT 'Bodega Principal Bucaramanga', 'Zona Industrial Norte', 5000, 'Carlos Ramírez'
@@ -200,19 +200,19 @@ INSERT INTO bodega (nombre, ubicacion, capacidad, encargado)
 SELECT 'Bodega Secundaria Sur', 'Autopista Sur Km 3', 80, 'Sandra López'
 WHERE NOT EXISTS (SELECT 1 FROM bodega WHERE nombre = 'Bodega Secundaria Sur');
 
-INSERT INTO producto (nombre, categoria, precio, proveedor_principal_id)
+INSERT INTO producto (nombre, categoria, precio, proveedor_id)
 SELECT 'Resma Papel A4', 'Oficina', 18500,
-       (SELECT id FROM proveedor WHERE nombre = 'Proveedor Andina SAS')
+       (SELECT id FROM proveedores WHERE nombre = 'Proveedor Andina SAS')
 WHERE NOT EXISTS (SELECT 1 FROM producto WHERE nombre = 'Resma Papel A4');
 
-INSERT INTO producto (nombre, categoria, precio, proveedor_principal_id)
+INSERT INTO producto (nombre, categoria, precio, proveedor_id)
 SELECT 'Toner Laser Negro', 'Oficina', 120000,
-       (SELECT id FROM proveedor WHERE nombre = 'Suministros Caribe Ltda')
+       (SELECT id FROM proveedores WHERE nombre = 'Suministros Caribe Ltda')
 WHERE NOT EXISTS (SELECT 1 FROM producto WHERE nombre = 'Toner Laser Negro');
 
-INSERT INTO producto (nombre, categoria, precio, proveedor_principal_id)
+INSERT INTO producto (nombre, categoria, precio, proveedor_id)
 SELECT 'Laptop Gamer XYZ', 'Tecnología', 3500000,
-       (SELECT id FROM proveedor WHERE nombre = 'Proveedor Andina SAS')
+       (SELECT id FROM proveedores WHERE nombre = 'Proveedor Andina SAS')
 WHERE NOT EXISTS (SELECT 1 FROM producto WHERE nombre = 'Laptop Gamer XYZ');
 
 -- Stock bajo en Papel y Toner (stock < punto de reorden si hay consumo).
@@ -280,7 +280,7 @@ INSERT INTO orden_compra (
 SELECT p.id, pr.id, b.id, 40, p.precio, 40 * p.precio,
        NOW(), 'BORRADOR', a.id
 FROM producto p
-JOIN proveedor pr ON pr.id = p.proveedor_principal_id
+JOIN proveedores pr ON pr.id = p.proveedor_id
 JOIN bodega b ON b.nombre = 'Bodega Principal Bucaramanga'
 JOIN usuario a ON a.username = 'agente_mcp'
 WHERE p.nombre = 'Resma Papel A4'
@@ -296,7 +296,7 @@ INSERT INTO orden_compra (
 SELECT p.id, pr.id, b.id, 20, p.precio, 20 * p.precio,
        NOW(), 'BORRADOR', a.id
 FROM producto p
-JOIN proveedor pr ON pr.id = p.proveedor_principal_id
+JOIN proveedores pr ON pr.id = p.proveedor_id
 JOIN bodega b ON b.nombre = 'Bodega Principal Bucaramanga'
 JOIN usuario a ON a.username = 'agente_mcp'
 WHERE p.nombre = 'Toner Laser Negro'

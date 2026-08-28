@@ -116,7 +116,7 @@ class OrdenCompraEstadoTest {
 
         Proveedor proveedor = proveedorRepository.save(Proveedor.builder()
                 .nombre("Proveedor IQ")
-                .contacto("proveedor@iq.test")
+                .email("proveedor@iq.test")
                 .diasEntrega(7)
                 .build());
 

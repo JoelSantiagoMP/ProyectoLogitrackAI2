@@ -1,5 +1,6 @@
 package com.example.logitrack.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -18,7 +19,11 @@ public class ProductoRequest {
     @Min(value = 0, message = "El stock no puede ser negativo")
     private Integer stock;
 
+    @NotNull(message = "La bodega es obligatoria")
     private Long bodegaId;
+
+    @JsonAlias({"proveedorId", "proveedorPrincipalId"})
+    private Long proveedorId;
 
     public String getNombre() {
         return nombre;
@@ -58,5 +63,13 @@ public class ProductoRequest {
 
     public void setBodegaId(Long bodegaId) {
         this.bodegaId = bodegaId;
+    }
+
+    public Long getProveedorId() {
+        return proveedorId;
+    }
+
+    public void setProveedorId(Long proveedorId) {
+        this.proveedorId = proveedorId;
     }
 }

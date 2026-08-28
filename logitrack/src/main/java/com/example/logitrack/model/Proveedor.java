@@ -8,7 +8,7 @@ import jakarta.validation.constraints.NotNull;
 import lombok.*;
 
 @Entity
-@Table(name = "proveedor")
+@Table(name = "proveedores")
 @Getter
 @Setter
 @NoArgsConstructor
@@ -24,7 +24,8 @@ public class Proveedor {
     @Column(nullable = false)
     private String nombre;
 
-    private String contacto;
+    @Column(name = "email")
+    private String email;
 
     @NotNull(message = "Los días de entrega son obligatorios")
     @Min(value = 1, message = "Los días de entrega deben ser al menos 1")

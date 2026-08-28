@@ -2,6 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>LogiTrack — Gestión de Bodegas</title>
   <meta name="description" content="Sistema centralizado de gestión y auditoría de bodegas para LogiTrack S.A. Control de inventario, movimientos y reportes en tiempo real." />
@@ -467,11 +468,11 @@
                 <table class="data-table" id="table-productos">
                   <thead>
                     <tr>
-                      <th>ID</th><th>Nombre</th><th>Categoría</th><th>Stock</th><th>Precio</th><th class="admin-only">Acciones</th>
+                      <th>ID</th><th>Nombre</th><th>Categoría</th><th>Proveedor</th><th>Bodega</th><th>Stock</th><th>Precio</th><th class="admin-only">Acciones</th>
                     </tr>
                   </thead>
                   <tbody id="tbody-productos">
-                    <tr class="loading-row"><td colspan="6"><div class="table-loading">Cargando datos...</div></td></tr>
+                    <tr class="loading-row"><td colspan="8"><div class="table-loading">Cargando datos...</div></td></tr>
                   </tbody>
                 </table>
               </div>
@@ -826,21 +827,81 @@
           </div>
           <div class="form-group">
             <label for="producto-precio">Precio (USD) *</label>
-            <input type="number" id="producto-precio" placeholder="Ej: 12.50" min="0" step="0.01" required />
+            <input type="number" id="producto-precio" class="input-no-spinners" placeholder="Ej: 12.50" min="0" step="0.01" inputmode="decimal" required />
           </div>
         </div>
         <div class="form-group" id="grupo-producto-bodega">
-          <label for="producto-bodega" id="label-producto-bodega">Bodega del inventario *</label>
-          <select id="producto-bodega">
-            <option value="">Selecciona una bodega</option>
-          </select>
-          <small id="hint-producto-bodega" style="color:var(--clr-txt-muted);display:block;margin-top:.35rem">Si el stock es mayor a 0, se crea un movimiento de entrada en esa bodega.</small>
+          <label for="producto-bodega-input" id="label-producto-bodega">Bodega *</label>
+          <div class="entity-picker autocomplete" id="producto-bodega-picker" data-entity-picker="producto-bodega">
+            <input type="hidden" id="producto-bodega-id" />
+            <div class="autocomplete-chip hidden" id="producto-bodega-chip">
+              <span class="autocomplete-chip-text" id="producto-bodega-chip-text"></span>
+              <button type="button" class="autocomplete-chip-clear" data-picker-clear="producto-bodega" aria-label="Quitar bodega" title="Quitar">×</button>
+            </div>
+            <div class="autocomplete-input-wrap">
+              <input type="text" id="producto-bodega-input" placeholder="Buscar bodega…" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-controls="producto-bodega-list" aria-required="true" />
+              <ul class="autocomplete-list hidden" id="producto-bodega-list" role="listbox"></ul>
+            </div>
+          </div>
+          <small id="hint-producto-bodega" style="color:var(--clr-txt-muted);display:block;margin-top:.35rem">Indica la bodega donde se registrará el inventario de este producto.</small>
+        </div>
+        <div class="form-group" id="grupo-producto-proveedor">
+          <label for="producto-proveedor-input" id="label-producto-proveedor">Proveedor principal</label>
+          <div class="entity-picker autocomplete" id="producto-proveedor-picker" data-entity-picker="producto-proveedor">
+            <input type="hidden" id="producto-proveedor-id" />
+            <div class="autocomplete-chip hidden" id="producto-proveedor-chip">
+              <span class="autocomplete-chip-text" id="producto-proveedor-chip-text"></span>
+              <button type="button" class="autocomplete-chip-clear" data-picker-clear="producto-proveedor" aria-label="Quitar proveedor" title="Quitar">×</button>
+            </div>
+            <div class="autocomplete-input-wrap">
+              <input type="text" id="producto-proveedor-input" placeholder="Buscar proveedor…" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-controls="producto-proveedor-list" />
+              <ul class="autocomplete-list hidden" id="producto-proveedor-list" role="listbox"></ul>
+            </div>
+          </div>
+          <small id="hint-producto-proveedor" class="picker-context-hint">Asigna el proveedor habitual del producto para habilitar alertas de riesgo y órdenes automáticas.</small>
         </div>
         <div id="producto-error" class="form-error hidden"></div>
         <div class="modal-actions">
           <button type="button" class="btn btn-outline" data-modal="modal-producto">Cancelar</button>
           <button type="submit" class="btn btn-primary" id="btn-save-producto">
             <span class="btn-text">Guardar</span>
+            <span class="btn-spinner hidden"></span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal creación rápida de proveedor (desde picker de producto) -->
+  <div id="modal-proveedor-rapido" class="modal-backdrop modal-backdrop--stacked hidden admin-only">
+    <div class="modal modal-sm">
+      <div class="modal-header">
+        <h3 class="modal-title">Nuevo proveedor</h3>
+        <button class="modal-close" data-modal="modal-proveedor-rapido" type="button">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 6 6 18M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+      <form id="form-proveedor-rapido" class="modal-form" novalidate>
+        <div class="form-group">
+          <label for="proveedor-rapido-nombre">Nombre *</label>
+          <input type="text" id="proveedor-rapido-nombre" required maxlength="150" autocomplete="organization" />
+        </div>
+        <div class="form-group">
+          <label for="proveedor-rapido-email">Email</label>
+          <input type="email" id="proveedor-rapido-email" maxlength="150" autocomplete="email" placeholder="compras@empresa.com" />
+        </div>
+        <div class="form-group">
+          <label for="proveedor-rapido-dias">Días de entrega *</label>
+          <input type="number" id="proveedor-rapido-dias" required min="1" max="90" value="7" />
+          <small class="picker-context-hint">Entre 1 y 90 días hábiles estimados.</small>
+        </div>
+        <div id="proveedor-rapido-error" class="form-error hidden" role="alert"></div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" data-modal="modal-proveedor-rapido">Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="btn-save-proveedor-rapido">
+            Guardar y seleccionar
             <span class="btn-spinner hidden"></span>
           </button>
         </div>
@@ -871,26 +932,60 @@
             </select>
           </div>
           <div class="form-group">
-            <label for="mov-usuario">ID Usuario *</label>
-            <input type="number" id="mov-usuario" placeholder="ID del usuario" required />
+            <label for="mov-usuario-input">Usuario *</label>
+            <div class="entity-picker autocomplete" id="mov-usuario-picker" data-entity-picker="mov-usuario">
+              <input type="hidden" id="mov-usuario-id" />
+              <div class="autocomplete-chip hidden" id="mov-usuario-chip">
+                <span class="autocomplete-chip-text" id="mov-usuario-chip-text"></span>
+                <button type="button" class="autocomplete-chip-clear" data-picker-clear="mov-usuario" aria-label="Quitar usuario" title="Quitar">×</button>
+              </div>
+              <div class="autocomplete-input-wrap">
+                <input type="text" id="mov-usuario-input" placeholder="Buscar por nombre de usuario…" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-controls="mov-usuario-list" aria-required="true" />
+                <ul class="autocomplete-list hidden" id="mov-usuario-list" role="listbox"></ul>
+              </div>
+            </div>
           </div>
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label for="mov-bodega-origen">ID Bodega Origen</label>
-            <input type="number" id="mov-bodega-origen" placeholder="ID bodega origen" />
+            <label for="mov-bodega-origen-input">Bodega Origen</label>
+            <div class="entity-picker autocomplete" id="mov-bodega-origen-picker" data-entity-picker="mov-bodega-origen">
+              <input type="hidden" id="mov-bodega-origen-id" />
+              <div class="autocomplete-chip hidden" id="mov-bodega-origen-chip">
+                <span class="autocomplete-chip-text" id="mov-bodega-origen-chip-text"></span>
+                <button type="button" class="autocomplete-chip-clear" data-picker-clear="mov-bodega-origen" aria-label="Quitar bodega origen" title="Quitar">×</button>
+              </div>
+              <div class="autocomplete-input-wrap">
+                <input type="text" id="mov-bodega-origen-input" placeholder="Buscar bodega de origen…" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-controls="mov-bodega-origen-list" />
+                <ul class="autocomplete-list hidden" id="mov-bodega-origen-list" role="listbox"></ul>
+              </div>
+            </div>
+            <small id="hint-mov-bodega-origen" class="picker-context-hint hidden" style="color:var(--clr-txt-muted);display:block;margin-top:.35rem"></small>
           </div>
           <div class="form-group">
-            <label for="mov-bodega-destino">ID Bodega Destino</label>
-            <input type="number" id="mov-bodega-destino" placeholder="ID bodega destino" />
+            <label for="mov-bodega-destino-input">Bodega Destino</label>
+            <div class="entity-picker autocomplete" id="mov-bodega-destino-picker" data-entity-picker="mov-bodega-destino">
+              <input type="hidden" id="mov-bodega-destino-id" />
+              <div class="autocomplete-chip hidden" id="mov-bodega-destino-chip">
+                <span class="autocomplete-chip-text" id="mov-bodega-destino-chip-text"></span>
+                <button type="button" class="autocomplete-chip-clear" data-picker-clear="mov-bodega-destino" aria-label="Quitar bodega destino" title="Quitar">×</button>
+              </div>
+              <div class="autocomplete-input-wrap">
+                <input type="text" id="mov-bodega-destino-input" placeholder="Buscar bodega de destino…" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-controls="mov-bodega-destino-list" />
+                <ul class="autocomplete-list hidden" id="mov-bodega-destino-list" role="listbox"></ul>
+              </div>
+            </div>
           </div>
         </div>
         <div class="form-group">
           <label>Detalle de Productos</label>
           <div id="detalles-container">
             <div class="detalle-row" data-index="0">
-              <input type="number" placeholder="ID Producto" class="detalle-producto" />
-              <input type="number" placeholder="Cantidad" class="detalle-cantidad" min="1" />
+              <div class="detalle-producto-col">
+                <div class="detalle-producto-wrap" data-detalle-producto-wrap="0"></div>
+                <span class="detalle-stock-hint hidden" aria-live="polite"></span>
+              </div>
+              <input type="number" placeholder="Cantidad" class="detalle-cantidad" min="1" step="1" inputmode="numeric" aria-label="Cantidad" />
               <button type="button" class="btn-remove-detalle" onclick="removeDetalle(this)">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                   <path d="M18 6 6 18M6 6l12 12"/>

@@ -46,8 +46,54 @@ function isAdmin() {
   return getCurrentRole() === 'ADMIN';
 }
 
-const ADMIN_ONLY_PAGES = ['auditoria', 'usuarios'];
-const ADMIN_MODALS = ['modal-movimiento', 'modal-bodega', 'modal-producto', 'modal-usuario', 'modal-confirm'];
+const ADMIN_MODALS = ['modal-movimiento', 'modal-bodega', 'modal-producto', 'modal-proveedor-rapido', 'modal-usuario', 'modal-confirm'];
+
+const PAGE_ROLES = {
+  dashboard: ['ADMIN', 'AGENTE'],
+  ordenes: ['ADMIN', 'AGENTE'],
+  bodegas: ['ADMIN', 'AGENTE', 'EMPLEADO'],
+  productos: ['ADMIN', 'AGENTE', 'EMPLEADO'],
+  movimientos: ['ADMIN', 'AGENTE', 'EMPLEADO'],
+  reportes: ['ADMIN', 'AGENTE', 'EMPLEADO'],
+  auditoria: ['ADMIN'],
+  usuarios: ['ADMIN'],
+};
+
+function canAccessPage(page) {
+  const role = getCurrentRole();
+  if (!role || !page) return false;
+  return (PAGE_ROLES[page] || []).includes(role);
+}
+
+function getDefaultPageForRole() {
+  const role = getCurrentRole();
+  const priority = ['dashboard', 'bodegas', 'productos', 'movimientos', 'reportes', 'ordenes', 'auditoria', 'usuarios'];
+  return priority.find((page) => (PAGE_ROLES[page] || []).includes(role)) || 'bodegas';
+}
+
+function applySidebarRbac() {
+  const role = getCurrentRole();
+  if (!role) return;
+
+  document.querySelectorAll('.nav-item[data-page]').forEach((item) => {
+    if (!canAccessPage(item.dataset.page)) {
+      item.remove();
+    }
+  });
+
+  document.querySelectorAll('.sidebar-nav .nav-section-label').forEach((label) => {
+    let sibling = label.nextElementSibling;
+    let hasNavItem = false;
+    while (sibling && !sibling.classList.contains('nav-section-label')) {
+      if (sibling.matches('.nav-item[data-page]')) {
+        hasNavItem = true;
+        break;
+      }
+      sibling = sibling.nextElementSibling;
+    }
+    if (!hasNavItem) label.remove();
+  });
+}
 
 function forceLogout() {
   clearSession();
@@ -260,9 +306,10 @@ const pageTitles = {
 };
 
 function navigateTo(page) {
-  if (ADMIN_ONLY_PAGES.includes(page) && !isAdmin()) {
+  if (!canAccessPage(page)) {
     showToast('No tienes permiso para acceder a esta sección.', 'error');
-    page = 'dashboard';
+    page = getDefaultPageForRole();
+    if (!canAccessPage(page)) return;
   }
   pages.forEach(p => {
     document.getElementById(`page-${p}`)?.classList.remove('active');
@@ -333,9 +380,9 @@ loginForm?.addEventListener('submit', async (e) => {
       method: 'POST',
       body: JSON.stringify({ username, password }),
     });
-    const token = data?.token || data?.accessToken || data?.jwt || data;
+    const token = data?.token || data?.accessToken || data?.jwt || (typeof data === 'string' ? data : null);
     if (!token || typeof token !== 'string') throw new Error('Respuesta de login inválida.');
-    saveSession(token, username);
+    saveSession(token, data?.username || username, data?.rol);
     await resolveCurrentRole();
     setApiStatus(true);
     enterApp();
@@ -373,20 +420,23 @@ function enterApp() {
   const userLabel = document.getElementById('sidebar-username');
   if (userLabel) userLabel.textContent = currentUser || 'Usuario';
   applyRoleUi();
-  navigateTo('dashboard');
+  navigateTo(getDefaultPageForRole());
 }
 
 async function resolveCurrentRole() {
   currentRole = sessionStorage.getItem('logitrack_rol');
   try {
-    const usuarios = await apiFetch('/api/usuarios');
-    const me = (usuarios || []).find((u) => u.username === currentUser);
+    const me = await apiFetch('/api/auth/me');
     if (me?.rol) {
       currentRole = me.rol;
       sessionStorage.setItem('logitrack_rol', me.rol);
     }
+    if (me?.username) {
+      currentUser = me.username;
+      sessionStorage.setItem('logitrack_user', me.username);
+    }
   } catch (_) {
-    /* AGENTE/ADMIN: si no hay listado, se conserva el rol ya guardado */
+    /* Se conserva el rol almacenado en sesión si /me no está disponible */
   }
   applyRoleUi();
 }
@@ -396,26 +446,28 @@ function applyRoleUi() {
   const roleEl = document.getElementById('sidebar-role');
   if (roleEl) roleEl.textContent = currentRole || '—';
 
-  if (isAdmin()) return;
+  applySidebarRbac();
 
-  document.querySelectorAll('.admin-only').forEach((el) => el.remove());
+  if (!isAdmin()) {
+    document.querySelectorAll('.admin-only').forEach((el) => el.remove());
+    ADMIN_MODALS.forEach((id) => closeModal(id));
+  }
 
-  ADMIN_MODALS.forEach((id) => closeModal(id));
-
-  const activeAdminPage = ADMIN_ONLY_PAGES.find(
+  const activePage = pages.find(
     (p) => document.getElementById(`page-${p}`)?.classList.contains('active')
   );
-  if (activeAdminPage) {
+  if (activePage && !canAccessPage(activePage)) {
     pages.forEach((p) => {
       document.getElementById(`page-${p}`)?.classList.remove('active');
       document.getElementById(`nav-${p}`)?.classList.remove('active');
     });
-    const dash = document.getElementById('page-dashboard');
-    const navDash = document.getElementById('nav-dashboard');
-    if (dash) dash.classList.add('active');
-    if (navDash) navDash.classList.add('active');
-    document.getElementById('page-title').textContent = pageTitles.dashboard[0];
-    document.getElementById('page-breadcrumb').textContent = pageTitles.dashboard[1];
+    const fallback = getDefaultPageForRole();
+    document.getElementById(`page-${fallback}`)?.classList.add('active');
+    document.getElementById(`nav-${fallback}`)?.classList.add('active');
+    const [title, breadcrumb] = pageTitles[fallback] || [fallback, fallback];
+    document.getElementById('page-title').textContent = title;
+    document.getElementById('page-breadcrumb').textContent = breadcrumb;
+    loadPage(fallback);
   }
 }
 
@@ -878,6 +930,7 @@ document.getElementById('form-bodega')?.addEventListener('submit', async (e) => 
    PRODUCTOS
    ───────────────────────────────────────────────────── */
 let productosData = [];
+let proveedoresData = [];
 let showingLowStock = false;
 
 function populateFiltroCategoriasProducto() {
@@ -909,7 +962,9 @@ function aplicarFiltrosProductos() {
   if (q) {
     data = data.filter((p) =>
       (p.nombre || '').toLowerCase().includes(q) ||
-      (p.categoria || '').toLowerCase().includes(q)
+      (p.categoria || '').toLowerCase().includes(q) ||
+      (p.bodegaNombre || '').toLowerCase().includes(q) ||
+      (p.proveedorPrincipal?.nombre || '').toLowerCase().includes(q)
     );
   }
   renderProductosTable(data, Boolean(q || categoria || showingLowStock));
@@ -922,7 +977,7 @@ async function loadProductos() {
     aplicarFiltrosProductos();
     setApiStatus(true);
   } catch (e) {
-    showTableError('tbody-productos', isAdmin() ? 6 : 5, e.message);
+    showTableError('tbody-productos', isAdmin() ? 8 : 7, e.message);
     setApiStatus(false);
   }
 }
@@ -930,7 +985,7 @@ async function loadProductos() {
 function renderProductosTable(data, filtrosActivos = false) {
   const tbody = document.getElementById('tbody-productos');
   if (!tbody) return;
-  const cols = isAdmin() ? 6 : 5;
+  const cols = isAdmin() ? 8 : 7;
   if (!data.length) {
     const msg = filtrosActivos ? 'No se encontraron productos' : 'No hay productos registrados';
     tbody.innerHTML = `<tr><td colspan="${cols}"><div class="table-loading">${msg}</div></td></tr>`;
@@ -941,6 +996,14 @@ function renderProductosTable(data, filtrosActivos = false) {
       <td><span style="font-weight:600;color:var(--clr-txt-muted)">#${p.id}</span></td>
       <td style="font-weight:500">${escapeHtml(p.nombre)}</td>
       <td><span class="badge badge-empleado">${escapeHtml(p.categoria)}</span></td>
+      <td>${p.proveedorPrincipal?.nombre
+        ? `<span class="badge badge-proveedor" title="${escapeAttr(p.proveedorPrincipal.email || '')}">${escapeHtml(p.proveedorPrincipal.nombre)}</span>`
+        : '<span style="color:var(--clr-txt-muted)">—</span>'}
+      </td>
+      <td>${p.bodegaNombre
+        ? p.bodegaNombre.split(', ').map((nombre) => `<span class="badge badge-bodega">${escapeHtml(nombre)}</span>`).join(' ')
+        : '<span style="color:var(--clr-txt-muted)">—</span>'}
+      </td>
       <td class="${p.stock < 10 ? 'stock-low' : 'stock-ok'}">${p.stock} uds ${p.stock < 10 ? '⚠' : ''}</td>
       <td>${formatCurrency(p.precio)}</td>
       ${isAdmin() ? `<td>
@@ -985,29 +1048,61 @@ document.getElementById('btn-nuevo-producto')?.addEventListener('click', async (
   document.getElementById('producto-error').classList.add('hidden');
   document.getElementById('producto-stock').disabled = false;
   document.getElementById('label-producto-stock').textContent = 'Stock inicial *';
-  document.getElementById('label-producto-bodega').textContent = 'Bodega del inventario *';
-  document.getElementById('hint-producto-bodega').textContent = 'Si el stock es mayor a 0, se registra un movimiento de entrada en esa bodega.';
+  document.getElementById('label-producto-bodega').textContent = 'Bodega *';
+  document.getElementById('hint-producto-bodega').textContent = 'Indica la bodega donde se registrará el inventario de este producto.';
   document.getElementById('grupo-producto-bodega').classList.remove('hidden');
-  await fillProductoBodegas();
+  await ensureProductoModalData();
+  resetEntityPicker('producto-bodega');
+  resetEntityPicker('producto-proveedor');
   openModal('modal-producto');
 });
 
-async function fillProductoBodegas(selectedId) {
-  const select = document.getElementById('producto-bodega');
-  if (!select) return;
+async function loadProveedoresParaPicker() {
   try {
-    const bodegas = await apiFetch('/api/bodegas') || [];
-    select.innerHTML = '<option value="">Selecciona una bodega</option>' + bodegas.map(b =>
-      `<option value="${b.id}" ${String(b.id) === String(selectedId) ? 'selected' : ''}>${escapeHtml(b.nombre)}</option>`
-    ).join('');
+    const data = await apiFetch('/api/proveedores');
+    proveedoresData = data || [];
   } catch {
-    select.innerHTML = '<option value="">No se pudieron cargar las bodegas</option>';
+    proveedoresData = [];
   }
+  return proveedoresData;
+}
+
+async function ensureProductoModalData() {
+  const tasks = [];
+  if (!bodegasCache.length && !bodegasData.length) {
+    tasks.push(apiFetch('/api/bodegas').then((data) => {
+      bodegasCache = data || [];
+    }).catch(() => {
+      bodegasCache = [];
+    }));
+  }
+  tasks.push(loadProveedoresParaPicker());
+  if (tasks.length) await Promise.all(tasks);
+}
+
+async function ensureProductoBodegasData() {
+  await ensureProductoModalData();
+}
+
+async function setProductoProveedorPicker(selectedProveedor) {
+  await ensureProductoModalData();
+  resetEntityPicker('producto-proveedor');
+  if (!selectedProveedor) return;
+  const proveedor = getProveedoresParaPicker().find((pr) => String(pr.id) === String(selectedProveedor.id ?? selectedProveedor));
+  if (proveedor) setEntityPickerSelection('producto-proveedor', proveedor);
+}
+
+async function setProductoBodegaPicker(selectedId) {
+  await ensureProductoBodegasData();
+  resetEntityPicker('producto-bodega');
+  if (!selectedId) return;
+  const bodega = getBodegasParaPicker().find((b) => String(b.id) === String(selectedId));
+  if (bodega) setEntityPickerSelection('producto-bodega', bodega);
 }
 
 async function cargarStockBodegaProducto() {
   const productoId = document.getElementById('producto-id').value;
-  const bodegaId = document.getElementById('producto-bodega').value;
+  const bodegaId = getEntityPickerValue('producto-bodega');
   const stockInput = document.getElementById('producto-stock');
   if (!productoId || !bodegaId) return;
   try {
@@ -1017,12 +1112,6 @@ async function cargarStockBodegaProducto() {
     stockInput.value = 0;
   }
 }
-
-document.getElementById('producto-bodega')?.addEventListener('change', () => {
-  if (document.getElementById('producto-id').value) {
-    cargarStockBodegaProducto();
-  }
-});
 
 async function editProducto(id) {
   if (!isAdmin()) return;
@@ -1034,15 +1123,14 @@ async function editProducto(id) {
   document.getElementById('producto-precio').value = p.precio;
   document.getElementById('producto-stock').disabled = false;
   document.getElementById('label-producto-stock').textContent = 'Stock en la bodega *';
-  document.getElementById('label-producto-bodega').textContent = 'Bodega a ajustar *';
-  document.getElementById('hint-producto-bodega').textContent = 'El valor es el stock de esa bodega. Si lo cambias, se genera un movimiento de entrada o salida para conservar la trazabilidad.';
+  document.getElementById('label-producto-bodega').textContent = 'Bodega *';
+  document.getElementById('hint-producto-bodega').textContent = 'Selecciona la bodega del producto. Si cambias el stock, se genera un movimiento de entrada o salida para conservar la trazabilidad.';
   document.getElementById('grupo-producto-bodega').classList.remove('hidden');
   document.getElementById('modal-producto-title').textContent = 'Editar Producto';
   document.getElementById('producto-error').classList.add('hidden');
-  await fillProductoBodegas();
-  const select = document.getElementById('producto-bodega');
-  if (select.options.length > 1) {
-    select.selectedIndex = 1;
+  await setProductoBodegaPicker(p.bodegaId);
+  await setProductoProveedorPicker(p.proveedorPrincipal);
+  if (p.bodegaId) {
     await cargarStockBodegaProducto();
   } else {
     document.getElementById('producto-stock').value = p.stock ?? 0;
@@ -1055,24 +1143,22 @@ document.getElementById('form-producto')?.addEventListener('submit', async (e) =
   if (!isAdmin()) return;
   const id = document.getElementById('producto-id').value;
   const stockVal = parseInt(document.getElementById('producto-stock').value);
-  const bodegaIdVal = document.getElementById('producto-bodega')?.value;
+  const bodegaIdVal = getEntityPickerValue('producto-bodega');
+  const proveedorIdVal = getEntityPickerValue('producto-proveedor');
   const body = {
     nombre: document.getElementById('producto-nombre').value.trim(),
     categoria: document.getElementById('producto-categoria').value.trim(),
     stock: stockVal,
     precio: parseFloat(document.getElementById('producto-precio').value),
-    bodegaId: bodegaIdVal ? parseInt(bodegaIdVal) : null,
+    bodegaId: bodegaIdVal,
+    proveedorId: proveedorIdVal,
   };
   if (!body.nombre || !body.categoria || isNaN(body.stock) || isNaN(body.precio)) {
     showModalError('producto-error', 'Completa todos los campos obligatorios.');
     return;
   }
-  if (body.stock > 0 && !body.bodegaId) {
-    showModalError('producto-error', 'Selecciona la bodega para el inventario.');
-    return;
-  }
-  if (id && body.stock >= 0 && !body.bodegaId) {
-    showModalError('producto-error', 'Selecciona la bodega cuyo stock quieres ajustar.');
+  if (!body.bodegaId) {
+    showModalError('producto-error', 'Selecciona la bodega del producto.');
     return;
   }
   setModalLoading('btn-save-producto', true);
@@ -1092,6 +1178,767 @@ document.getElementById('form-producto')?.addEventListener('submit', async (e) =
     setModalLoading('btn-save-producto', false);
   }
 });
+
+/* ─────────────────────────────────────────────────────
+   ENTITY PICKER (combobox predictivo reutilizable)
+   ───────────────────────────────────────────────────── */
+const entityPickerRegistry = {};
+
+function registerEntityPicker(prefix, config) {
+  entityPickerRegistry[prefix] = config;
+}
+
+function formatEntityChip(item, label) {
+  return `[ID: #${item.id}] ${label}`;
+}
+
+function filterEntitiesPredictive(items, query, getSearchText, getLabel) {
+  const q = (query || '').trim().toLowerCase();
+  if (!q) return [];
+
+  const matches = (items || []).filter((item) => {
+    const label = (getLabel ? getLabel(item) : '').toLowerCase();
+    const searchText = getSearchText(item).toLowerCase();
+    const idText = String(item.id ?? '').toLowerCase();
+    return label.includes(q) || searchText.includes(q) || idText.includes(q);
+  });
+
+  matches.sort((a, b) => {
+    const aLabel = (getLabel ? getLabel(a) : getSearchText(a)).toLowerCase();
+    const bLabel = (getLabel ? getLabel(b) : getSearchText(b)).toLowerCase();
+    const aIdx = aLabel.indexOf(q);
+    const bIdx = bLabel.indexOf(q);
+    if (aIdx !== bIdx) return aIdx - bIdx;
+    return aLabel.localeCompare(bLabel, 'es', { sensitivity: 'base' });
+  });
+
+  return matches.slice(0, 12);
+}
+
+function setEntityPickerOpen(prefix, open) {
+  const root = document.getElementById(`${prefix}-picker`);
+  if (!root) return;
+  const modal = root.closest('.modal-backdrop');
+  if (open) {
+    const scope = modal
+      ? `#${modal.id} .entity-picker[data-entity-picker]`
+      : '.entity-picker[data-entity-picker]';
+    document.querySelectorAll(scope).forEach((el) => {
+      const otherPrefix = el.getAttribute('data-entity-picker');
+      if (!otherPrefix || otherPrefix === prefix) return;
+      const otherList = document.getElementById(`${otherPrefix}-list`);
+      const otherInput = document.getElementById(`${otherPrefix}-input`);
+      otherList?.classList.add('hidden');
+      otherInput?.setAttribute('aria-expanded', 'false');
+      el.classList.remove('is-open');
+    });
+    root.classList.add('is-open');
+  } else {
+    root.classList.remove('is-open');
+  }
+}
+
+function hideEntityPickerList(prefix) {
+  const list = document.getElementById(`${prefix}-list`);
+  const input = document.getElementById(`${prefix}-input`);
+  list?.classList.add('hidden');
+  input?.setAttribute('aria-expanded', 'false');
+  setEntityPickerOpen(prefix, false);
+}
+
+function entityPickerHasExactMatch(items, query, getLabel) {
+  const q = (query || '').trim().toLowerCase();
+  if (!q) return false;
+  return (items || []).some((item) => (getLabel ? getLabel(item) : '').trim().toLowerCase() === q);
+}
+
+function renderEntityPickerOptions(prefix, matches, activeIndex = -1, query = '') {
+  const list = document.getElementById(`${prefix}-list`);
+  const input = document.getElementById(`${prefix}-input`);
+  const config = entityPickerRegistry[prefix];
+  if (!list || !input || !config) return;
+
+  const q = (query || '').trim();
+  const items = config.getItems?.() || [];
+  const offerCreate = q
+    && config.onCreateRequest
+    && !entityPickerHasExactMatch(items, q, config.getLabel);
+
+  if (!matches.length && !offerCreate) {
+    list.innerHTML = '<li class="autocomplete-empty">Sin coincidencias</li>';
+    list.classList.remove('hidden');
+    input.setAttribute('aria-expanded', 'true');
+    setEntityPickerOpen(prefix, true);
+    return;
+  }
+
+  let html = matches.map((item, idx) => {
+    const label = config.getOptionLabel ? config.getOptionLabel(item) : config.getLabel(item);
+    const subtext = config.getOptionSubtext?.(item);
+    const optionClass = config.getOptionClass?.(item) || '';
+    const hideId = config.hideOptionId;
+    return `<li class="autocomplete-option${idx === activeIndex ? ' is-active' : ''}${optionClass ? ` ${optionClass}` : ''}" role="option" data-picker-prefix="${escapeAttr(prefix)}" data-entity-id="${item.id}">
+      <div class="entity-option-content">
+        <span class="entity-option-label">${escapeHtml(label)}</span>
+        ${subtext ? `<span class="entity-option-subtext">${escapeHtml(subtext)}</span>` : ''}
+      </div>
+      ${hideId ? '' : `<span class="entity-option-id">#${item.id}</span>`}
+    </li>`;
+  }).join('');
+
+  if (offerCreate) {
+    const createIdx = matches.length;
+    const createLabel = config.getCreateOptionLabel
+      ? config.getCreateOptionLabel(q)
+      : `+ Agregar proveedor "${q}"`;
+    html += `<li class="autocomplete-option autocomplete-option--create${createIdx === activeIndex ? ' is-active' : ''}" role="option" data-picker-prefix="${escapeAttr(prefix)}" data-create-query="${escapeAttr(q)}">
+      <span class="entity-option-label">${escapeHtml(createLabel)}</span>
+    </li>`;
+  }
+
+  list.innerHTML = html;
+  list.classList.remove('hidden');
+  input.setAttribute('aria-expanded', 'true');
+  setEntityPickerOpen(prefix, true);
+}
+
+function getEntityPickerSelection(prefix) {
+  const hidden = document.getElementById(`${prefix}-id`);
+  const id = hidden?.value ? parseInt(hidden.value, 10) : null;
+  if (!id) return null;
+  const config = entityPickerRegistry[prefix];
+  const items = config?.getItems?.() || [];
+  return items.find((item) => item.id === id) || { id };
+}
+
+function setEntityPickerSelection(prefix, item) {
+  const hidden = document.getElementById(`${prefix}-id`);
+  const chip = document.getElementById(`${prefix}-chip`);
+  const chipText = document.getElementById(`${prefix}-chip-text`);
+  const root = document.getElementById(`${prefix}-picker`);
+  const input = document.getElementById(`${prefix}-input`);
+  const config = entityPickerRegistry[prefix];
+  if (!hidden || !chip || !chipText || !root || !input || !config) return;
+
+  if (item) {
+    hidden.value = item.id;
+    chipText.textContent = formatEntityChip(item, config.getLabel(item));
+    chip.classList.remove('hidden');
+    root.classList.add('is-selected');
+    input.value = '';
+    config.onSelect?.(item);
+  } else {
+    hidden.value = '';
+    chipText.textContent = '';
+    chip.classList.add('hidden');
+    root.classList.remove('is-selected');
+    config.onClear?.();
+  }
+  hideEntityPickerList(prefix);
+}
+
+function getEntityPickerValue(prefix) {
+  const raw = document.getElementById(`${prefix}-id`)?.value;
+  if (!raw) return null;
+  const id = parseInt(raw, 10);
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
+
+function resetEntityPicker(prefix) {
+  setEntityPickerSelection(prefix, null);
+  const input = document.getElementById(`${prefix}-input`);
+  if (input) input.value = '';
+}
+
+function initEntityPicker(prefix) {
+  const config = entityPickerRegistry[prefix];
+  const input = document.getElementById(`${prefix}-input`);
+  const list = document.getElementById(`${prefix}-list`);
+  if (!config || !input || !list || input.dataset.pickerBound === '1') return;
+  input.dataset.pickerBound = '1';
+
+  let activeIndex = -1;
+  let currentMatches = [];
+  let currentQuery = '';
+
+  input.addEventListener('input', () => {
+    if (getEntityPickerValue(prefix)) return;
+    activeIndex = -1;
+    const q = (input.value || '').trim();
+    currentQuery = q;
+    if (!q && config.getItemsOnEmptyFocus) {
+      currentMatches = config.getItemsOnEmptyFocus();
+      if (currentMatches.length) {
+        renderEntityPickerOptions(prefix, currentMatches, activeIndex, q);
+      } else {
+        hideEntityPickerList(prefix);
+      }
+      return;
+    }
+    if (!q) {
+      hideEntityPickerList(prefix);
+      return;
+    }
+    currentMatches = filterEntitiesPredictive(config.getItems(), q, config.getSearchText, config.getLabel);
+    renderEntityPickerOptions(prefix, currentMatches, activeIndex, q);
+  });
+
+  input.addEventListener('keydown', (e) => {
+    if (list.classList.contains('hidden')) return;
+    const offerCreate = currentQuery
+      && config.onCreateRequest
+      && !entityPickerHasExactMatch(config.getItems?.() || [], currentQuery, config.getLabel);
+    const totalOptions = currentMatches.length + (offerCreate ? 1 : 0);
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (!totalOptions) return;
+      activeIndex = (activeIndex + 1) % totalOptions;
+      renderEntityPickerOptions(prefix, currentMatches, activeIndex, currentQuery);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!totalOptions) return;
+      activeIndex = (activeIndex - 1 + totalOptions) % totalOptions;
+      renderEntityPickerOptions(prefix, currentMatches, activeIndex, currentQuery);
+    } else if (e.key === 'Enter') {
+      if (offerCreate && activeIndex === currentMatches.length) {
+        e.preventDefault();
+        config.onCreateRequest(currentQuery);
+        hideEntityPickerList(prefix);
+        return;
+      }
+      if (activeIndex >= 0 && currentMatches[activeIndex]) {
+        e.preventDefault();
+        setEntityPickerSelection(prefix, currentMatches[activeIndex]);
+      }
+    } else if (e.key === 'Escape') {
+      hideEntityPickerList(prefix);
+    }
+  });
+
+  list.addEventListener('mousedown', (e) => {
+    const createOption = e.target.closest('[data-create-query]');
+    if (createOption && createOption.getAttribute('data-picker-prefix') === prefix) {
+      e.preventDefault();
+      const query = createOption.getAttribute('data-create-query') || '';
+      config.onCreateRequest?.(query);
+      hideEntityPickerList(prefix);
+      return;
+    }
+    const option = e.target.closest('[data-entity-id]');
+    if (!option || option.getAttribute('data-picker-prefix') !== prefix) return;
+    e.preventDefault();
+    const id = parseInt(option.getAttribute('data-entity-id'), 10);
+    const item = (config.getItems() || []).find((x) => x.id === id);
+    if (item) setEntityPickerSelection(prefix, item);
+  });
+
+  input.addEventListener('focus', () => {
+    if (getEntityPickerValue(prefix)) return;
+    const q = (input.value || '').trim();
+    currentQuery = q;
+    activeIndex = -1;
+    if (!q && config.getItemsOnEmptyFocus) {
+      currentMatches = config.getItemsOnEmptyFocus();
+      if (currentMatches.length) {
+        renderEntityPickerOptions(prefix, currentMatches, activeIndex, q);
+      }
+      return;
+    }
+    if (!q) return;
+    currentMatches = filterEntitiesPredictive(config.getItems(), q, config.getSearchText, config.getLabel);
+    renderEntityPickerOptions(prefix, currentMatches, activeIndex, q);
+  });
+
+  input.addEventListener('blur', () => {
+    setTimeout(() => hideEntityPickerList(prefix), 120);
+  });
+}
+
+function bindEntityPickerClearButtons() {
+  if (document.body.dataset.pickerClearBound === '1') return;
+  document.body.dataset.pickerClearBound = '1';
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-picker-clear]');
+    if (!btn) return;
+    e.preventDefault();
+    const prefix = btn.getAttribute('data-picker-clear');
+    setEntityPickerSelection(prefix, null);
+    document.getElementById(`${prefix}-input`)?.focus();
+  });
+}
+
+function bindMonetaryInput(input) {
+  if (!input || input.dataset.moneyBound === '1') return;
+  input.dataset.moneyBound = '1';
+  input.addEventListener('wheel', (e) => {
+    if (document.activeElement === input) e.preventDefault();
+  }, { passive: false });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'e' || e.key === 'E') e.preventDefault();
+  });
+}
+
+function createEntityPickerHtml(prefix, placeholder) {
+  return `
+    <div class="entity-picker autocomplete" id="${prefix}-picker" data-entity-picker="${prefix}">
+      <input type="hidden" id="${prefix}-id" />
+      <div class="autocomplete-chip hidden" id="${prefix}-chip">
+        <span class="autocomplete-chip-text" id="${prefix}-chip-text"></span>
+        <button type="button" class="autocomplete-chip-clear" data-picker-clear="${prefix}" aria-label="Quitar selección" title="Quitar">×</button>
+      </div>
+      <div class="autocomplete-input-wrap">
+        <input type="text" id="${prefix}-input" placeholder="${escapeHtml(placeholder)}" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-controls="${prefix}-list" />
+        <ul class="autocomplete-list hidden" id="${prefix}-list" role="listbox"></ul>
+      </div>
+    </div>`;
+}
+
+function bindCantidadInput(input) {
+  if (!input || input.dataset.qtyBound === '1') return;
+  input.dataset.qtyBound = '1';
+  input.setAttribute('min', '1');
+  input.setAttribute('step', '1');
+  input.setAttribute('inputmode', 'numeric');
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === '-' || e.key === 'e' || e.key === 'E' || e.key === '+' || e.key === '.' || e.key === ',') {
+      e.preventDefault();
+    }
+  });
+
+  input.addEventListener('input', () => {
+    const raw = input.value.trim();
+    if (raw === '') {
+      input.classList.remove('detalle-cantidad-invalid');
+      input.setCustomValidity('');
+      return;
+    }
+    const n = parseInt(raw, 10);
+    if (!Number.isInteger(n) || n < 1) {
+      input.classList.add('detalle-cantidad-invalid');
+      input.setCustomValidity('La cantidad debe ser un entero mayor o igual a 1.');
+    } else {
+      input.classList.remove('detalle-cantidad-invalid');
+      input.setCustomValidity('');
+      if (String(n) !== raw) input.value = String(n);
+    }
+  });
+
+  input.addEventListener('wheel', (e) => {
+    if (document.activeElement === input) e.preventDefault();
+  }, { passive: false });
+}
+
+function parseCantidadValid(raw) {
+  if (raw === '' || raw == null) {
+    return { valid: false, value: null, error: 'Indica una cantidad válida (mínimo 1).' };
+  }
+  const n = parseInt(String(raw).trim(), 10);
+  if (!Number.isInteger(n) || n < 1) {
+    return { valid: false, value: null, error: 'La cantidad debe ser un entero mayor o igual a 1.' };
+  }
+  return { valid: true, value: n, error: null };
+}
+
+function getUsuariosParaPicker() {
+  const merged = [...(usuariosFiltroCache || []), ...(usuariosData || [])];
+  const byId = new Map();
+  for (const u of merged) {
+    if (u?.id != null) byId.set(u.id, u);
+  }
+  return [...byId.values()].sort((a, b) => (a.username || '').localeCompare(b.username || '', 'es', { sensitivity: 'base' }));
+}
+
+function getBodegasParaPicker() {
+  const merged = [...(bodegasCache || []), ...(bodegasData || [])];
+  const byId = new Map();
+  for (const b of merged) {
+    if (b?.id != null) byId.set(b.id, b);
+  }
+  return [...byId.values()].sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '', 'es', { sensitivity: 'base' }));
+}
+
+function getBodegasParaPicker() {
+  const merged = [...(bodegasCache || []), ...(bodegasData || [])];
+  const byId = new Map();
+  for (const b of merged) {
+    if (b?.id != null) byId.set(b.id, b);
+  }
+  return [...byId.values()].sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '', 'es', { sensitivity: 'base' }));
+}
+
+let inventarioMovimientoCache = new Map();
+
+async function loadInventarioMovimientoCache() {
+  try {
+    const data = await apiFetch('/api/reportes/inventario') || [];
+    inventarioMovimientoCache = new Map();
+    for (const row of data) {
+      const productoId = row.productoId;
+      if (productoId == null) continue;
+      if (!inventarioMovimientoCache.has(productoId)) {
+        inventarioMovimientoCache.set(productoId, []);
+      }
+      inventarioMovimientoCache.get(productoId).push({
+        bodegaId: row.bodegaId,
+        bodegaNombre: row.bodegaNombre,
+        cantidad: row.cantidad ?? 0,
+      });
+    }
+    for (const items of inventarioMovimientoCache.values()) {
+      items.sort((a, b) => (a.bodegaNombre || '').localeCompare(b.bodegaNombre || '', 'es', { sensitivity: 'base' }));
+    }
+  } catch {
+    inventarioMovimientoCache = new Map();
+  }
+}
+
+function getInventarioProducto(productoId) {
+  return inventarioMovimientoCache.get(productoId) || [];
+}
+
+function obtenerStockEnBodega(productoId, bodegaId) {
+  const inv = getInventarioProducto(productoId).find((i) => String(i.bodegaId) === String(bodegaId));
+  return inv?.cantidad ?? 0;
+}
+
+function formatProductoInventarioLine(productoId) {
+  const items = getInventarioProducto(productoId).filter((i) => i.cantidad > 0);
+  if (!items.length) return 'Sin stock en bodegas';
+  return items.map((i) => `${i.bodegaNombre} (${i.cantidad} uds)`).join(', ');
+}
+
+function getMovimientoProductosSeleccionados() {
+  const ids = [];
+  document.querySelectorAll('#detalles-container .detalle-row').forEach((row) => {
+    const index = row.dataset.index ?? '0';
+    const id = getEntityPickerValue(`detalle-producto-${index}`);
+    if (id) ids.push(id);
+  });
+  return [...new Set(ids)];
+}
+
+function getBodegasConStockParaProductos(productoIds) {
+  const bodegas = getBodegasParaPicker();
+  const resultado = [];
+  for (const bodega of bodegas) {
+    let cantidadTotal = 0;
+    for (const productoId of productoIds) {
+      cantidadTotal += obtenerStockEnBodega(productoId, bodega.id);
+    }
+    if (cantidadTotal > 0) {
+      resultado.push({ bodegaId: bodega.id, bodegaNombre: bodega.nombre, cantidadTotal });
+    }
+  }
+  return resultado.sort((a, b) => b.cantidadTotal - a.cantidadTotal
+    || (a.bodegaNombre || '').localeCompare(b.bodegaNombre || '', 'es', { sensitivity: 'base' }));
+}
+
+function getBodegasOrigenPriorizadas() {
+  const productoIds = getMovimientoProductosSeleccionados();
+  const bodegas = getBodegasParaPicker();
+  if (!productoIds.length) return bodegas;
+
+  const conStock = new Set(getBodegasConStockParaProductos(productoIds).map((b) => b.bodegaId));
+  return [...bodegas].sort((a, b) => {
+    const aTiene = conStock.has(a.id);
+    const bTiene = conStock.has(b.id);
+    if (aTiene !== bTiene) return aTiene ? -1 : 1;
+    const stockA = productoIds.reduce((sum, pid) => sum + obtenerStockEnBodega(pid, a.id), 0);
+    const stockB = productoIds.reduce((sum, pid) => sum + obtenerStockEnBodega(pid, b.id), 0);
+    if (stockA !== stockB) return stockB - stockA;
+    return (a.nombre || '').localeCompare(b.nombre || '', 'es', { sensitivity: 'base' });
+  });
+}
+
+function formatBodegaStockParaProductos(bodegaId) {
+  const productoIds = getMovimientoProductosSeleccionados();
+  if (!productoIds.length) return '';
+  return productoIds.map((pid) => {
+    const producto = productosData.find((p) => p.id === pid);
+    const qty = obtenerStockEnBodega(pid, bodegaId);
+    return `${producto?.nombre || `Producto #${pid}`}: ${qty} uds`;
+  }).join(' · ');
+}
+
+function bodegaTieneStockProductosSeleccionados(bodegaId) {
+  return getMovimientoProductosSeleccionados().some((pid) => obtenerStockEnBodega(pid, bodegaId) > 0);
+}
+
+function updateMovimientoBodegaOrigenContext() {
+  const hint = document.getElementById('hint-mov-bodega-origen');
+  const input = document.getElementById('mov-bodega-origen-input');
+  const productoIds = getMovimientoProductosSeleccionados();
+  if (!hint || !input) return;
+
+  if (!productoIds.length) {
+    hint.textContent = '';
+    hint.classList.add('hidden');
+    hint.classList.remove('picker-hint-warning');
+    input.placeholder = 'Buscar bodega de origen…';
+    return;
+  }
+
+  const sugerencias = getBodegasConStockParaProductos(productoIds);
+  input.placeholder = 'Bodegas con stock del producto…';
+
+  if (!sugerencias.length) {
+    hint.textContent = 'Los productos seleccionados no tienen stock en ninguna bodega.';
+    hint.classList.remove('hidden');
+    hint.classList.add('picker-hint-warning');
+    return;
+  }
+
+  const texto = sugerencias.slice(0, 3)
+    .map((s) => `${s.bodegaNombre} (${s.cantidadTotal} uds)`)
+    .join(', ');
+  hint.textContent = `Sugerencia: hay stock en ${texto}${sugerencias.length > 3 ? '…' : ''}`;
+  hint.classList.remove('hidden', 'picker-hint-warning');
+}
+
+function updateDetalleStockHint(row) {
+  const hint = row?.querySelector('.detalle-stock-hint');
+  if (!hint) return;
+
+  const index = row.dataset.index ?? '0';
+  const productoId = getEntityPickerValue(`detalle-producto-${index}`);
+  const bodegaOrigenId = getEntityPickerValue('mov-bodega-origen');
+  const cantidadInput = row.querySelector('.detalle-cantidad');
+  const tipo = document.getElementById('mov-tipo')?.value || '';
+
+  if (!productoId || !bodegaOrigenId || (tipo && tipo === 'ENTRADA')) {
+    hint.textContent = '';
+    hint.className = 'detalle-stock-hint hidden';
+    return;
+  }
+
+  const disponible = obtenerStockEnBodega(productoId, bodegaOrigenId);
+  const qty = parseInt(cantidadInput?.value || '', 10);
+  hint.classList.remove('hidden');
+
+  if (disponible <= 0) {
+    hint.className = 'detalle-stock-hint stock-low';
+    hint.textContent = 'Sin stock en la bodega origen seleccionada';
+    return;
+  }
+
+  if (Number.isInteger(qty) && qty > disponible) {
+    hint.className = 'detalle-stock-hint stock-insufficient';
+    hint.textContent = `Disponible: ${disponible} uds · solicitas ${qty} (insuficiente)`;
+    return;
+  }
+
+  hint.className = 'detalle-stock-hint stock-ok';
+  hint.textContent = `Disponible en origen: ${disponible} uds`;
+}
+
+function refreshAllDetalleStockHints() {
+  document.querySelectorAll('#detalles-container .detalle-row').forEach(updateDetalleStockHint);
+}
+
+function getProveedoresParaPicker() {
+  return proveedoresData || [];
+}
+
+function openProveedorRapidoModal(nombrePrefill) {
+  const form = document.getElementById('form-proveedor-rapido');
+  form?.reset();
+  document.getElementById('proveedor-rapido-nombre').value = (nombrePrefill || '').trim();
+  document.getElementById('proveedor-rapido-dias').value = '7';
+  document.getElementById('proveedor-rapido-error')?.classList.add('hidden');
+  openModal('modal-proveedor-rapido');
+  setTimeout(() => document.getElementById('proveedor-rapido-nombre')?.focus(), 50);
+}
+
+async function crearProveedorRapido(body) {
+  const creado = await apiFetch('/api/proveedores', { method: 'POST', body: JSON.stringify(body) });
+  proveedoresData = [...(proveedoresData || []).filter((p) => p.id !== creado.id), creado];
+  return creado;
+}
+
+document.getElementById('form-proveedor-rapido')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!isAdmin()) return;
+
+  const nombre = document.getElementById('proveedor-rapido-nombre').value.trim();
+  const email = document.getElementById('proveedor-rapido-email').value.trim();
+  const diasEntrega = parseInt(document.getElementById('proveedor-rapido-dias').value, 10);
+
+  if (!nombre) {
+    showModalError('proveedor-rapido-error', 'El nombre del proveedor es obligatorio.');
+    return;
+  }
+  if (!Number.isInteger(diasEntrega) || diasEntrega < 1 || diasEntrega > 90) {
+    showModalError('proveedor-rapido-error', 'Los días de entrega deben estar entre 1 y 90.');
+    return;
+  }
+
+  setModalLoading('btn-save-proveedor-rapido', true);
+  try {
+    const creado = await crearProveedorRapido({
+      nombre,
+      email: email || null,
+      diasEntrega,
+    });
+    setEntityPickerSelection('producto-proveedor', creado);
+    closeModal('modal-proveedor-rapido');
+    showToast(`Proveedor "${creado.nombre}" creado y seleccionado.`, 'success');
+  } catch (err) {
+    showModalError('proveedor-rapido-error', err.message || 'No se pudo crear el proveedor.');
+  } finally {
+    setModalLoading('btn-save-proveedor-rapido', false);
+  }
+});
+
+function registerProductoModalPickers() {
+  registerEntityPicker('producto-bodega', {
+    getItems: getBodegasParaPicker,
+    getLabel: (b) => b.nombre,
+    getSearchText: (b) => `${b.nombre} ${b.id} ${b.ubicacion || ''}`,
+    onSelect: () => {
+      if (document.getElementById('producto-id')?.value) {
+        cargarStockBodegaProducto();
+      }
+    },
+    onClear: () => {
+      const stockInput = document.getElementById('producto-stock');
+      if (stockInput && document.getElementById('producto-id')?.value) {
+        stockInput.value = '';
+      }
+    },
+  });
+  registerEntityPicker('producto-proveedor', {
+    getItems: getProveedoresParaPicker,
+    getLabel: (pr) => pr.nombre,
+    getSearchText: (pr) => `${pr.nombre} ${pr.id} ${pr.email || ''} ${pr.diasEntrega || ''}`,
+    getOptionSubtext: (pr) => {
+      const partes = [];
+      if (pr.email) partes.push(pr.email);
+      if (pr.diasEntrega != null) partes.push(`${pr.diasEntrega} días de entrega`);
+      return partes.join(' · ');
+    },
+    getCreateOptionLabel: (q) => `+ Agregar proveedor "${q}"`,
+    onCreateRequest: (query) => openProveedorRapidoModal(query),
+    getItemsOnEmptyFocus: getProveedoresParaPicker,
+  });
+}
+
+function registerMovimientoModalPickers() {
+  registerEntityPicker('mov-usuario', {
+    getItems: getUsuariosParaPicker,
+    getLabel: (u) => u.username,
+    getSearchText: (u) => `${u.username} ${u.id} ${u.rol || ''}`,
+  });
+  registerEntityPicker('mov-bodega-origen', {
+    getItems: getBodegasOrigenPriorizadas,
+    getLabel: (b) => b.nombre,
+    getSearchText: (b) => `${b.nombre} ${b.id} ${b.ubicacion || ''} ${formatBodegaStockParaProductos(b.id)}`,
+    getOptionSubtext: (b) => formatBodegaStockParaProductos(b.id),
+    getOptionClass: (b) => (bodegaTieneStockProductosSeleccionados(b.id) ? 'autocomplete-option--suggested' : ''),
+    getItemsOnEmptyFocus: () => {
+      const productoIds = getMovimientoProductosSeleccionados();
+      return productoIds.length ? getBodegasOrigenPriorizadas() : [];
+    },
+    onSelect: () => refreshAllDetalleStockHints(),
+    onClear: () => refreshAllDetalleStockHints(),
+  });
+  registerEntityPicker('mov-bodega-destino', {
+    getItems: getBodegasParaPicker,
+    getLabel: (b) => b.nombre,
+    getSearchText: (b) => `${b.nombre} ${b.id} ${b.ubicacion || ''}`,
+  });
+}
+
+function registerDetalleProductoPicker(index) {
+  const prefix = `detalle-producto-${index}`;
+  registerEntityPicker(prefix, {
+    getItems: () => productosData,
+    getLabel: (p) => p.nombre,
+    getSearchText: (p) => `${p.nombre} ${p.id} ${p.categoria || ''} ${formatProductoInventarioLine(p.id)}`,
+    getOptionLabel: (p) => {
+      const stockLine = formatProductoInventarioLine(p.id);
+      return stockLine === 'Sin stock en bodegas' ? p.nombre : `${p.nombre} — ${stockLine}`;
+    },
+    onSelect: () => {
+      updateMovimientoBodegaOrigenContext();
+      const row = document.querySelector(`#detalles-container .detalle-row[data-index="${index}"]`);
+      if (row) updateDetalleStockHint(row);
+    },
+    onClear: () => {
+      updateMovimientoBodegaOrigenContext();
+      const row = document.querySelector(`#detalles-container .detalle-row[data-index="${index}"]`);
+      if (row) updateDetalleStockHint(row);
+    },
+  });
+  return prefix;
+}
+
+function mountDetalleProductoPicker(wrap, index) {
+  const prefix = registerDetalleProductoPicker(index);
+  wrap.innerHTML = createEntityPickerHtml(prefix, 'Buscar producto…');
+  initEntityPicker(prefix);
+}
+
+function initDetalleRow(row, index) {
+  const wrap = row.querySelector('[data-detalle-producto-wrap]');
+  if (wrap) {
+    wrap.setAttribute('data-detalle-producto-wrap', String(index));
+    mountDetalleProductoPicker(wrap, index);
+  }
+  const cantidadInput = row.querySelector('.detalle-cantidad');
+  bindCantidadInput(cantidadInput);
+  cantidadInput?.addEventListener('input', () => updateDetalleStockHint(row));
+}
+
+function buildDetalleRowHtml(index) {
+  return `
+    <div class="detalle-row" data-index="${index}">
+      <div class="detalle-producto-col">
+        <div class="detalle-producto-wrap" data-detalle-producto-wrap="${index}"></div>
+        <span class="detalle-stock-hint hidden" aria-live="polite"></span>
+      </div>
+      <input type="number" placeholder="Cantidad" class="detalle-cantidad" min="1" step="1" inputmode="numeric" aria-label="Cantidad" />
+      <button type="button" class="btn-remove-detalle" onclick="removeDetalle(this)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>`;
+}
+
+function resetDetallesContainer() {
+  const container = document.getElementById('detalles-container');
+  if (!container) return;
+  container.innerHTML = buildDetalleRowHtml(0);
+  initDetalleRow(container.firstElementChild, 0);
+}
+
+async function ensureMovimientoModalData() {
+  const tasks = [];
+  if (!usuariosFiltroCache.length && !usuariosData.length) {
+    tasks.push(populateUsuariosAutocomplete());
+  }
+  if (!bodegasCache.length && !bodegasData.length) {
+    tasks.push(apiFetch('/api/bodegas').then((data) => { bodegasCache = data || []; }).catch(() => {}));
+  }
+  if (!productosData.length) {
+    tasks.push(apiFetch('/api/productos').then((data) => { productosData = data || []; }).catch(() => {}));
+  }
+  tasks.push(loadInventarioMovimientoCache());
+  if (tasks.length) await Promise.all(tasks);
+}
+
+function initMovimientoModalPickers() {
+  registerMovimientoModalPickers();
+  registerProductoModalPickers();
+  ['mov-usuario', 'mov-bodega-origen', 'mov-bodega-destino', 'producto-bodega', 'producto-proveedor'].forEach((prefix) => {
+    initEntityPicker(prefix);
+  });
+  bindEntityPickerClearButtons();
+  bindMonetaryInput(document.getElementById('producto-precio'));
+  const firstRow = document.querySelector('#detalles-container .detalle-row');
+  if (firstRow) initDetalleRow(firstRow, 0);
+}
+
+initMovimientoModalPickers();
 
 /* ─────────────────────────────────────────────────────
    MOVIMIENTOS
@@ -1467,39 +2314,38 @@ function verDetalleMovimiento(id) {
   openModal('modal-detalle');
 }
 
-document.getElementById('btn-nuevo-movimiento')?.addEventListener('click', () => {
+document.getElementById('btn-nuevo-movimiento')?.addEventListener('click', async () => {
+  await ensureMovimientoModalData();
   document.getElementById('form-movimiento').reset();
-  document.getElementById('detalles-container').innerHTML = `
-    <div class="detalle-row" data-index="0">
-      <input type="number" placeholder="ID Producto" class="detalle-producto" />
-      <input type="number" placeholder="Cantidad" class="detalle-cantidad" min="1" />
-      <button type="button" class="btn-remove-detalle" onclick="removeDetalle(this)">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
-      </button>
-    </div>`;
+  resetEntityPicker('mov-usuario');
+  resetEntityPicker('mov-bodega-origen');
+  resetEntityPicker('mov-bodega-destino');
+  resetDetallesContainer();
+  updateMovimientoBodegaOrigenContext();
   document.getElementById('movimiento-error').classList.add('hidden');
   openModal('modal-movimiento');
 });
+
+document.getElementById('mov-tipo')?.addEventListener('change', refreshAllDetalleStockHints);
 
 document.getElementById('btn-add-detalle')?.addEventListener('click', () => {
   const container = document.getElementById('detalles-container');
   const idx = container.children.length;
   const div = document.createElement('div');
-  div.className = 'detalle-row';
-  div.dataset.index = idx;
-  div.innerHTML = `
-    <input type="number" placeholder="ID Producto" class="detalle-producto" />
-    <input type="number" placeholder="Cantidad" class="detalle-cantidad" min="1" />
-    <button type="button" class="btn-remove-detalle" onclick="removeDetalle(this)">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
-    </button>`;
-  container.appendChild(div);
+  div.innerHTML = buildDetalleRowHtml(idx).trim();
+  const row = div.firstElementChild;
+  container.appendChild(row);
+  initDetalleRow(row, idx);
 });
 
 function removeDetalle(btn) {
   const row = btn.closest('.detalle-row');
   const container = document.getElementById('detalles-container');
-  if (container.children.length > 1) row.remove();
+  if (container.children.length > 1) {
+    row.remove();
+    updateMovimientoBodegaOrigenContext();
+    refreshAllDetalleStockHints();
+  }
 }
 
 document.getElementById('form-movimiento')?.addEventListener('submit', async (e) => {
@@ -1509,24 +2355,75 @@ document.getElementById('form-movimiento')?.addEventListener('submit', async (e)
     return;
   }
   const tipo = document.getElementById('mov-tipo').value;
-  const usuarioId = document.getElementById('mov-usuario').value;
-  const bodegaOrigenId = document.getElementById('mov-bodega-origen').value;
-  const bodegaDestinoId = document.getElementById('mov-bodega-destino').value;
-  if (!tipo || !usuarioId) { showModalError('movimiento-error', 'Completa el tipo y usuario.'); return; }
+  const usuarioId = getEntityPickerValue('mov-usuario');
+  const bodegaOrigenId = getEntityPickerValue('mov-bodega-origen');
+  const bodegaDestinoId = getEntityPickerValue('mov-bodega-destino');
+
+  if (!tipo) {
+    showModalError('movimiento-error', 'Selecciona el tipo de movimiento.');
+    return;
+  }
+  if (!usuarioId) {
+    showModalError('movimiento-error', 'Selecciona un usuario válido desde el buscador.');
+    return;
+  }
+
   const detalleRows = document.querySelectorAll('#detalles-container .detalle-row');
   const detalles = [];
   for (const row of detalleRows) {
-    const pid = row.querySelector('.detalle-producto').value;
-    const qty = row.querySelector('.detalle-cantidad').value;
-    if (pid && qty) detalles.push({ producto: { id: parseInt(pid) }, cantidad: parseInt(qty) });
+    const index = row.dataset.index ?? '0';
+    const productoId = getEntityPickerValue(`detalle-producto-${index}`);
+    const cantidadInput = row.querySelector('.detalle-cantidad');
+    const qtyRaw = cantidadInput?.value ?? '';
+    const qtyCheck = parseCantidadValid(qtyRaw);
+
+    if (productoId && !qtyCheck.valid) {
+      cantidadInput?.classList.add('detalle-cantidad-invalid');
+      showModalError('movimiento-error', qtyCheck.error);
+      return;
+    }
+    if (!productoId && qtyRaw.trim()) {
+      showModalError('movimiento-error', 'Selecciona el producto correspondiente a la cantidad indicada.');
+      return;
+    }
+    if (productoId && qtyCheck.valid) {
+      detalles.push({ producto: { id: productoId }, cantidad: qtyCheck.value });
+    }
   }
+
+  if (!detalles.length) {
+    showModalError('movimiento-error', 'Agrega al menos un producto con cantidad válida (mínimo 1).');
+    return;
+  }
+
+  if ((tipo === 'SALIDA' || tipo === 'TRANSFERENCIA') && bodegaOrigenId) {
+    for (const row of detalleRows) {
+      const index = row.dataset.index ?? '0';
+      const productoId = getEntityPickerValue(`detalle-producto-${index}`);
+      const qtyRaw = row.querySelector('.detalle-cantidad')?.value ?? '';
+      const qtyCheck = parseCantidadValid(qtyRaw);
+      if (!productoId || !qtyCheck.valid) continue;
+      const disponible = obtenerStockEnBodega(productoId, bodegaOrigenId);
+      if (qtyCheck.value > disponible) {
+        const producto = productosData.find((p) => p.id === productoId);
+        updateDetalleStockHint(row);
+        showModalError(
+          'movimiento-error',
+          `Stock insuficiente para "${producto?.nombre || `producto #${productoId}`}": disponible ${disponible} uds, solicitado ${qtyCheck.value}.`
+        );
+        return;
+      }
+    }
+  }
+
   const body = {
     tipoMovimiento: tipo,
-    usuario: { id: parseInt(usuarioId) },
+    usuario: { id: usuarioId },
     detalles,
   };
-  if (bodegaOrigenId) body.bodegaOrigen = { id: parseInt(bodegaOrigenId) };
-  if (bodegaDestinoId) body.bodegaDestino = { id: parseInt(bodegaDestinoId) };
+  if (bodegaOrigenId) body.bodegaOrigen = { id: bodegaOrigenId };
+  if (bodegaDestinoId) body.bodegaDestino = { id: bodegaDestinoId };
+
   setModalLoading('btn-save-movimiento', true);
   try {
     await apiFetch('/api/movimientos', { method: 'POST', body: JSON.stringify(body) });

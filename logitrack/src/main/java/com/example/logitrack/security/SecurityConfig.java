@@ -1,5 +1,6 @@
 package com.example.logitrack.security;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -18,10 +19,13 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.List;
+import java.util.Map;
 
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
+
+    private static final ObjectMapper JSON = new ObjectMapper();
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
@@ -38,10 +42,15 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/", "/auth/**", "/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html")
                         .permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/auth/me").authenticated()
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers(HttpMethod.PATCH, "/api/ordenes/**", "/ordenes/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/movimientos", "/api/movimientos/**")
                         .hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/proveedores", "/proveedores")
+                        .hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/proveedores", "/proveedores")
+                        .authenticated()
                         .requestMatchers("/api/kpis", "/kpis", "/api/proveedores", "/proveedores",
                                 "/api/ordenes", "/api/ordenes/**", "/ordenes", "/ordenes/**",
                                 "/api/panel/**", "/panel/**")
@@ -56,9 +65,18 @@ public class SecurityConfig {
                 .exceptionHandling(ex -> ex
                         .accessDeniedHandler((request, response, accessDeniedException) -> {
                             response.setStatus(403);
-                            response.setContentType("application/json");
-                            response.getWriter().write(
-                                    "{\"status\":403,\"error\":\"Forbidden\",\"message\":\"No tiene permiso para esta acción\"}");
+                            response.setCharacterEncoding("UTF-8");
+                            response.setContentType("application/json;charset=UTF-8");
+                            Map<String, Object> body = Map.of(
+                                    "status", 403,
+                                    "error", "Forbidden",
+                                    "message", "No tiene permiso para esta acción");
+                            try {
+                                response.getWriter().write(JSON.writeValueAsString(body));
+                            } catch (Exception ignored) {
+                                response.getWriter().write(
+                                        "{\"status\":403,\"error\":\"Forbidden\",\"message\":\"No tiene permiso para esta accion\"}");
+                            }
                         }))
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 

@@ -17,6 +17,11 @@ public interface InventarioBodegaRepository extends JpaRepository<InventarioBode
      */
     Optional<InventarioBodega> findByBodegaIdAndProductoId(Long bodegaId, Long productoId);
 
+    List<InventarioBodega> findByProductoId(Long productoId);
+
+    @Query("SELECT i FROM InventarioBodega i JOIN FETCH i.bodega WHERE i.producto.id IN :productoIds")
+    List<InventarioBodega> findByProductoIdIn(@Param("productoIds") List<Long> productoIds);
+
     /**
      * Obtiene todos los registros de inventario de una bodega específica.
      */

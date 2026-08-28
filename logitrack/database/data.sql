@@ -11,7 +11,7 @@ INSERT INTO usuario (username, password, rol) VALUES
 ('agente_mcp', '$2a$10$vkbNymWQeG0w7nzNIKO0beRmKtXv.VjEZHIo.n46zY3ctaVqpDFtq', 'AGENTE');
 
 -- Proveedores
-INSERT INTO proveedor (nombre, contacto, dias_entrega) VALUES
+INSERT INTO proveedores (nombre, email, dias_entrega) VALUES
 ('Proveedor Andina SAS', 'compras@andina.test', 10),
 ('Suministros Caribe Ltda', 'ventas@caribe.test', 7);
 
@@ -21,7 +21,7 @@ INSERT INTO bodega (nombre, ubicacion, capacidad, encargado) VALUES
 ('Bodega Secundaria Sur', 'Autopista Sur Km 3', 80, 'Sandra López');
 
 -- Productos con proveedor principal
-INSERT INTO producto (nombre, categoria, precio, proveedor_principal_id) VALUES
+INSERT INTO producto (nombre, categoria, precio, proveedor_id) VALUES
 ('Resma Papel A4', 'Oficina', 18500, 1),
 ('Toner Laser Negro', 'Oficina', 120000, 2),
 ('Laptop Gamer XYZ', 'Tecnología', 3500000, 1);

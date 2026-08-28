@@ -65,7 +65,13 @@ public class IndicadoresInventarioService {
     }
 
     public boolean estaEnRiesgo(int stockTotal, double puntoReorden, boolean tieneProveedorPrincipal) {
-        return tieneProveedorPrincipal && stockTotal < puntoReorden;
+        if (!tieneProveedorPrincipal) {
+            return false;
+        }
+        if (stockTotal <= 0) {
+            return true;
+        }
+        return stockTotal < puntoReorden;
     }
 
     public double puntoReorden(double consumoDiarioPromedio, int diasEntrega) {
@@ -158,8 +164,12 @@ public class IndicadoresInventarioService {
                 continue;
             }
             Proveedor proveedor = producto.getProveedorPrincipal();
+            if (proveedor == null || proveedor.getId() == null) {
+                continue;
+            }
             double consumo = consumoDiarioPromedio(producto.getId());
-            double punto = puntoReorden(consumo, proveedor.getDiasEntrega());
+            int diasEntrega = proveedor.getDiasEntrega() != null ? proveedor.getDiasEntrega() : 0;
+            double punto = puntoReorden(consumo, diasEntrega);
             ResultadoCobertura cobertura = calcularCobertura(stockTotal, consumo);
             Map<String, Object> fila = new LinkedHashMap<>();
             fila.put("productoId", producto.getId());
@@ -249,7 +259,13 @@ public class IndicadoresInventarioService {
 
     private boolean evaluarRiesgo(Producto producto, int stockTotal) {
         Proveedor proveedor = producto.getProveedorPrincipal();
-        if (proveedor == null || proveedor.getDiasEntrega() == null) {
+        if (proveedor == null) {
+            return false;
+        }
+        if (stockTotal <= 0) {
+            return true;
+        }
+        if (proveedor.getDiasEntrega() == null) {
             return false;
         }
         double consumo = consumoDiarioPromedio(producto.getId());

@@ -22,12 +22,12 @@ CREATE TABLE IF NOT EXISTS bodega (
     CONSTRAINT capacidad_check CHECK (capacidad > 0)
 );
 
-CREATE TABLE IF NOT EXISTS proveedor (
+CREATE TABLE IF NOT EXISTS proveedores (
     id BIGSERIAL PRIMARY KEY,
     nombre VARCHAR(150) NOT NULL,
-    contacto VARCHAR(150),
+    email VARCHAR(150),
     dias_entrega INTEGER NOT NULL,
-    CONSTRAINT proveedor_dias_entrega_check CHECK (dias_entrega BETWEEN 1 AND 90)
+    CONSTRAINT proveedores_dias_entrega_check CHECK (dias_entrega BETWEEN 1 AND 90)
 );
 
 CREATE TABLE IF NOT EXISTS producto (
@@ -35,9 +35,9 @@ CREATE TABLE IF NOT EXISTS producto (
     nombre VARCHAR(150) NOT NULL UNIQUE,
     categoria VARCHAR(100),
     precio DECIMAL(10, 2) NOT NULL,
-    proveedor_principal_id BIGINT,
+    proveedor_id BIGINT,
     CONSTRAINT precio_check CHECK (precio >= 0),
-    CONSTRAINT fk_producto_proveedor FOREIGN KEY (proveedor_principal_id) REFERENCES proveedor(id)
+    CONSTRAINT fk_producto_proveedor FOREIGN KEY (proveedor_id) REFERENCES proveedores(id)
 );
 
 CREATE TABLE IF NOT EXISTS inventario_bodega (
@@ -103,7 +103,7 @@ CREATE TABLE IF NOT EXISTS orden_compra (
     CONSTRAINT orden_cantidad_check CHECK (cantidad > 0),
     CONSTRAINT orden_estado_check CHECK (estado IN ('BORRADOR', 'APROBADA', 'RECIBIDA', 'CANCELADA')),
     CONSTRAINT fk_orden_producto FOREIGN KEY (producto_id) REFERENCES producto(id),
-    CONSTRAINT fk_orden_proveedor FOREIGN KEY (proveedor_id) REFERENCES proveedor(id),
+    CONSTRAINT fk_orden_proveedor FOREIGN KEY (proveedor_id) REFERENCES proveedores(id),
     CONSTRAINT fk_orden_bodega FOREIGN KEY (bodega_destino_id) REFERENCES bodega(id),
     CONSTRAINT fk_orden_autor FOREIGN KEY (creado_por_id) REFERENCES usuario(id)
 );
