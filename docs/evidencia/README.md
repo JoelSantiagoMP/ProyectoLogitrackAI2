@@ -40,7 +40,7 @@ cd mcp-server && python ../docs/evidencia/generar_capturas.py  # terminal 3
 - [x] n8n ejecución exitosa (KPIs + riesgo + resumen + 1 orden BORRADOR)
 - [x] n8n error controlado (sin orden indebida)
 - [x] PDF BORRADOR con watermark visible
-- [ ] Video 4–6 min (externo al repo)
+- [ ] Video 4–6 min (externo al repo) — guía: [`guion-video.md`](guion-video.md)
 
 ### Enlace al video (completar)
 

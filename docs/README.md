@@ -17,7 +17,8 @@
 | [SDD 03 — Diseño](sdd/03-diseno.md) | Entidades, decisiones, flujo | Diseño |
 | [SDD 04 — Tareas](sdd/04-tareas.md) | Checklist de entregables | Seguimiento |
 | [Evidencia SDD/TDD](sdd/evidencia-sdd.md) | Commits, regla → prueba, rojo/verde | Certificación TDD |
-| [Evidencia operativa](evidencia/README.md) | MCP, n8n, PDF, capturas | Demostración funcional |
+| [Guía para grabar el video](evidencia/guion-video.md) | Guion, ventanas y pre-vuelo | Demostración / video |
+| [Evidencia operativa (MCP, n8n, PDF)](evidencia/README.md) | Capturas y logs | Demostración funcional |
 | [logitrack/README.md](../logitrack/README.md) | Backend, endpoints, estructura Java | Backend |
 | [mcp-server/README.md](../mcp-server/README.md) | 6 tools, variables, transporte HTTP | Integración MCP |
 | [skills/operacion-logitrack/SKILL.md](../skills/operacion-logitrack/SKILL.md) | Reglas del agente n8n | Automatización |

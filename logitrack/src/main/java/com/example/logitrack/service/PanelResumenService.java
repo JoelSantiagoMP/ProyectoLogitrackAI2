@@ -51,6 +51,16 @@ public class PanelResumenService {
                 .orElseThrow(() -> new ResourceNotFoundException("No hay un resumen de panel publicado."));
     }
 
+    @Transactional(readOnly = true)
+    public PanelResumenRequest obtenerUltimoContenido() {
+        ResumenPanel resumen = obtenerUltimo();
+        try {
+            return objectMapper.readValue(resumen.getContenidoJson(), PanelResumenRequest.class);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("El resumen almacenado no es JSON válido.");
+        }
+    }
+
     @Transactional
     public ResumenPanel publicar(PanelResumenRequest request, String username) {
         validarContrato(request);

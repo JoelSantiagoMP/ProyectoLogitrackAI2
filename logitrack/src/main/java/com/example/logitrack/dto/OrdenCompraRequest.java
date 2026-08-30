@@ -1,8 +1,10 @@
 package com.example.logitrack.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 
+@Schema(description = "Cuerpo de POST /api/ordenes. Crea una orden en estado BORRADOR.")
 public class OrdenCompraRequest {
 
     @NotNull(message = "El producto es obligatorio")

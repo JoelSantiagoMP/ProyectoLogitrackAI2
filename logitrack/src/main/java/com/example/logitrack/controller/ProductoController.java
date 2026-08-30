@@ -1,9 +1,15 @@
 package com.example.logitrack.controller;
 
+import com.example.logitrack.config.IqOpenApiDocs;
 import com.example.logitrack.dto.ProductoRequest;
+import com.example.logitrack.dto.ProductoRiesgoResponse;
+import com.example.logitrack.dto.StockProductoResponse;
 import com.example.logitrack.model.Producto;
 import com.example.logitrack.service.IndicadoresInventarioService;
 import com.example.logitrack.service.ProductoService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -15,6 +21,8 @@ import java.util.Map;
 
 @RestController
 @RequestMapping({"/api/productos", "/productos"})
+@Tag(name = "Productos")
+@SecurityRequirement(name = "bearerAuth")
 public class ProductoController {
 
     private final ProductoService productoService;
@@ -36,13 +44,25 @@ public class ProductoController {
         return ResponseEntity.ok(productoService.obtenerProductosStockBajo());
     }
 
+    @Operation(summary = "Listar productos en riesgo (IQ)",
+            description = """
+                    Productos con proveedor principal cuyo stock total es **menor** al punto de reorden. \
+                    Incluye consumo, cobertura, bodega destino sugerida.
+
+                    """ + IqOpenApiDocs.ROLE_ADMIN_AGENTE,
+            tags = {IqOpenApiDocs.TAG_KPIS})
+    @IqOpenApiDocs.SecuredAdminOrAgente
     @GetMapping("/riesgo")
-    public ResponseEntity<List<Map<String, Object>>> listarProductosEnRiesgo() {
+    public ResponseEntity<List<ProductoRiesgoResponse>> listarProductosEnRiesgo() {
         return ResponseEntity.ok(indicadoresInventarioService.listarProductosEnRiesgo());
     }
 
+    @Operation(summary = "Stock total y desglose por bodega (IQ)",
+            description = "Calculado desde movimientos. " + IqOpenApiDocs.ROLE_ADMIN_AGENTE,
+            tags = {IqOpenApiDocs.TAG_KPIS})
+    @IqOpenApiDocs.SecuredAdminOrAgente
     @GetMapping("/{id}/stock")
-    public ResponseEntity<Map<String, Object>> obtenerStockProducto(@PathVariable Long id) {
+    public ResponseEntity<StockProductoResponse> obtenerStockProducto(@PathVariable Long id) {
         return ResponseEntity.ok(indicadoresInventarioService.obtenerStockProducto(id));
     }
 

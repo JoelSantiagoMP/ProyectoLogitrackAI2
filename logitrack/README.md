@@ -86,6 +86,15 @@ chmod +x mvnw
 - Swagger UI: [http://localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html)
 - OpenAPI JSON: [http://localhost:8080/v3/api-docs](http://localhost:8080/v3/api-docs)
 
+### Swagger / OpenAPI
+
+1. Abre Swagger UI y ejecuta `POST /auth/login` con `admin_logitrack` / `123456`.
+2. Copia el `token` de la respuesta.
+3. Pulsa **Authorize** → pega `Bearer <token>` (o solo el token, según la UI).
+4. Prueba los endpoints IQ agrupados por tags: **IQ - KPIs**, **IQ - Órdenes**, **IQ - Panel**, etc.
+
+Los esquemas documentan campos del PDF (`KpisResponse`, `ProductoRiesgoResponse`, contrato del panel). Solo se listan rutas `/api/**` para evitar duplicados con alias sin prefijo.
+
 ## Usuarios de prueba (si cargaste `data.sql`)
 
 | Usuario | Rol | Contraseña de ejemplo |

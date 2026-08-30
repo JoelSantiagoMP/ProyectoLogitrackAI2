@@ -1,9 +1,14 @@
 package com.example.logitrack.controller;
 
+import com.example.logitrack.config.IqOpenApiDocs;
+import com.example.logitrack.dto.BodegaCriticaResponse;
 import com.example.logitrack.dto.BodegaDTO;
 import com.example.logitrack.model.Bodega;
 import com.example.logitrack.service.BodegaService;
 import com.example.logitrack.service.IndicadoresInventarioService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -15,6 +20,8 @@ import java.util.Map;
 
 @RestController
 @RequestMapping({"/api/bodegas", "/bodegas"})
+@Tag(name = "Bodegas")
+@SecurityRequirement(name = "bearerAuth")
 public class BodegaController {
 
     private final BodegaService bodegaService;
@@ -31,8 +38,12 @@ public class BodegaController {
         return ResponseEntity.ok(bodegaService.obtenerTodas());
     }
 
+    @Operation(summary = "Bodegas con ocupación crítica (IQ)",
+            description = "Lista bodegas con ocupación ≥ 90 %. " + IqOpenApiDocs.ROLE_ADMIN_AGENTE,
+            tags = {IqOpenApiDocs.TAG_KPIS})
+    @IqOpenApiDocs.SecuredAdminOrAgente
     @GetMapping("/criticas")
-    public ResponseEntity<List<Map<String, Object>>> listarBodegasCriticas() {
+    public ResponseEntity<List<BodegaCriticaResponse>> listarBodegasCriticas() {
         return ResponseEntity.ok(indicadoresInventarioService.listarBodegasCriticas());
     }
 

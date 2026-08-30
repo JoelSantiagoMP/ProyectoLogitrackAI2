@@ -1,6 +1,14 @@
 package com.example.logitrack.service;
 
+import com.example.logitrack.dto.BodegaCriticaResponse;
+import com.example.logitrack.dto.KpisResponse;
+import com.example.logitrack.dto.MovimientosAyerResponse;
+import com.example.logitrack.dto.OcupacionBodegaResponse;
+import com.example.logitrack.dto.OrdenesPorAprobarResponse;
+import com.example.logitrack.dto.ProductoRiesgoResponse;
 import com.example.logitrack.dto.ResultadoCobertura;
+import com.example.logitrack.dto.StockBodegaItemResponse;
+import com.example.logitrack.dto.StockProductoResponse;
 import com.example.logitrack.model.Bodega;
 import com.example.logitrack.model.EstadoOrdenCompra;
 import com.example.logitrack.model.InventarioBodega;
@@ -25,7 +33,6 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -79,18 +86,18 @@ public class IndicadoresInventarioService {
     }
 
     @Transactional(readOnly = true)
-    public Map<String, Object> obtenerKpis() {
+    public KpisResponse obtenerKpis() {
         OffsetDateTime calculadoEn = OffsetDateTime.now(ZONA_BOGOTA);
-        List<Map<String, Object>> ocupacion = new ArrayList<>();
+        List<OcupacionBodegaResponse> ocupacion = new ArrayList<>();
         for (Bodega bodega : bodegaRepository.findAllByOrderByIdAsc()) {
             int unidades = stockAlmacenadoEnBodega(bodega.getId());
             double porcentaje = calcularPorcentajeOcupacion(unidades, bodega.getCapacidad());
-            Map<String, Object> fila = new LinkedHashMap<>();
-            fila.put("bodegaId", bodega.getId());
-            fila.put("nombre", bodega.getNombre());
-            fila.put("porcentaje", porcentaje);
-            fila.put("unidades", unidades);
-            fila.put("capacidad", bodega.getCapacidad());
+            OcupacionBodegaResponse fila = new OcupacionBodegaResponse();
+            fila.setBodegaId(bodega.getId());
+            fila.setNombre(bodega.getNombre());
+            fila.setPorcentaje(porcentaje);
+            fila.setUnidades(unidades);
+            fila.setCapacidad(bodega.getCapacidad());
             ocupacion.add(fila);
         }
 
@@ -109,9 +116,9 @@ public class IndicadoresInventarioService {
         List<OrdenCompra> borradores = ordenCompraRepository.findByEstado(EstadoOrdenCompra.BORRADOR);
         double monto = borradores.stream().mapToDouble(o -> o.getTotal() != null ? o.getTotal() : 0.0).sum();
 
-        Map<String, Object> ordenesPorAprobar = new LinkedHashMap<>();
-        ordenesPorAprobar.put("cantidad", borradores.size());
-        ordenesPorAprobar.put("montoTotal", monto);
+        OrdenesPorAprobarResponse ordenesPorAprobar = new OrdenesPorAprobarResponse();
+        ordenesPorAprobar.setCantidad(borradores.size());
+        ordenesPorAprobar.setMontoTotal(monto);
 
         LocalDate ayer = LocalDate.now(ZONA_BOGOTA).minusDays(1);
         List<Movimiento> deAyer = movimientosEnRangoCalendarioBogota(ayer, ayer.plusDays(1));
@@ -119,45 +126,46 @@ public class IndicadoresInventarioService {
         long salida = deAyer.stream().filter(m -> m.getTipoMovimiento() == TipoMovimiento.SALIDA).count();
         long transferencia = deAyer.stream().filter(m -> m.getTipoMovimiento() == TipoMovimiento.TRANSFERENCIA).count();
 
-        Map<String, Object> movimientosAyer = new LinkedHashMap<>();
-        movimientosAyer.put("entrada", entrada);
-        movimientosAyer.put("salida", salida);
-        movimientosAyer.put("transferencia", transferencia);
-        movimientosAyer.put("fechaReferencia", ayer.toString());
+        MovimientosAyerResponse movimientosAyer = new MovimientosAyerResponse();
+        movimientosAyer.setEntrada(entrada);
+        movimientosAyer.setSalida(salida);
+        movimientosAyer.setTransferencia(transferencia);
+        movimientosAyer.setFechaReferencia(ayer.toString());
 
-        Map<String, Object> kpis = new LinkedHashMap<>();
-        kpis.put("calculadoEn", calculadoEn);
-        kpis.put("ocupacionPorBodega", ocupacion);
-        kpis.put("productosEnQuiebre", quiebre);
-        kpis.put("productosEnRiesgo", riesgo);
-        kpis.put("ordenesPorAprobar", ordenesPorAprobar);
-        kpis.put("movimientosAyer", movimientosAyer);
+        KpisResponse kpis = new KpisResponse();
+        kpis.setCalculadoEn(calculadoEn);
+        kpis.setOcupacionPorBodega(ocupacion);
+        kpis.setProductosEnQuiebre(quiebre);
+        kpis.setProductosEnRiesgo(riesgo);
+        kpis.setOrdenesPorAprobar(ordenesPorAprobar);
+        kpis.setMovimientosAyer(movimientosAyer);
         return kpis;
     }
 
     @Transactional(readOnly = true)
-    public Map<String, Object> obtenerStockProducto(Long productoId) {
+    public StockProductoResponse obtenerStockProducto(Long productoId) {
         productoRepository.findById(productoId)
                 .orElseThrow(() -> new com.example.logitrack.exception.ResourceNotFoundException(
                         "Producto no encontrado con el id: " + productoId));
         int total = stockTotalProducto(productoId);
-        List<Map<String, Object>> porBodega = new ArrayList<>();
+        List<StockBodegaItemResponse> porBodega = new ArrayList<>();
         for (Bodega bodega : bodegaRepository.findAllByOrderByIdAsc()) {
-            porBodega.add(Map.of(
-                    "bodegaId", bodega.getId(),
-                    "nombre", bodega.getNombre(),
-                    "cantidad", stockEnBodega(productoId, bodega.getId())));
+            StockBodegaItemResponse item = new StockBodegaItemResponse();
+            item.setBodegaId(bodega.getId());
+            item.setNombre(bodega.getNombre());
+            item.setCantidad(stockEnBodega(productoId, bodega.getId()));
+            porBodega.add(item);
         }
-        Map<String, Object> respuesta = new LinkedHashMap<>();
-        respuesta.put("productoId", productoId);
-        respuesta.put("stockTotal", total);
-        respuesta.put("porBodega", porBodega);
+        StockProductoResponse respuesta = new StockProductoResponse();
+        respuesta.setProductoId(productoId);
+        respuesta.setStockTotal(total);
+        respuesta.setPorBodega(porBodega);
         return respuesta;
     }
 
     @Transactional(readOnly = true)
-    public List<Map<String, Object>> listarProductosEnRiesgo() {
-        List<Map<String, Object>> resultado = new ArrayList<>();
+    public List<ProductoRiesgoResponse> listarProductosEnRiesgo() {
+        List<ProductoRiesgoResponse> resultado = new ArrayList<>();
         for (Producto producto : productoRepository.findAll()) {
             int stockTotal = stockTotalProducto(producto.getId());
             if (!evaluarRiesgo(producto, stockTotal)) {
@@ -171,24 +179,24 @@ public class IndicadoresInventarioService {
             int diasEntrega = proveedor.getDiasEntrega() != null ? proveedor.getDiasEntrega() : 0;
             double punto = puntoReorden(consumo, diasEntrega);
             ResultadoCobertura cobertura = calcularCobertura(stockTotal, consumo);
-            Map<String, Object> fila = new LinkedHashMap<>();
-            fila.put("productoId", producto.getId());
-            fila.put("nombreProducto", producto.getNombre());
-            fila.put("proveedorId", proveedor.getId());
-            fila.put("stockTotal", stockTotal);
-            fila.put("consumoDiarioPromedio", consumo);
-            fila.put("puntoReorden", punto);
-            fila.put("diasCobertura", cobertura.getDiasCobertura());
-            fila.put("estadoCobertura", cobertura.getEstadoCobertura());
-            fila.put("bodegaDestinoId", sugerirBodegaDestinoId(producto.getId()));
+            ProductoRiesgoResponse fila = new ProductoRiesgoResponse();
+            fila.setProductoId(producto.getId());
+            fila.setNombreProducto(producto.getNombre());
+            fila.setProveedorId(proveedor.getId());
+            fila.setStockTotal(stockTotal);
+            fila.setConsumoDiarioPromedio(consumo);
+            fila.setPuntoReorden(punto);
+            fila.setDiasCobertura(cobertura.getDiasCobertura());
+            fila.setEstadoCobertura(cobertura.getEstadoCobertura());
+            fila.setBodegaDestinoId(sugerirBodegaDestinoId(producto.getId()));
             resultado.add(fila);
         }
         return resultado;
     }
 
     @Transactional(readOnly = true)
-    public List<Map<String, Object>> listarBodegasCriticas() {
-        List<Map<String, Object>> criticas = new ArrayList<>();
+    public List<BodegaCriticaResponse> listarBodegasCriticas() {
+        List<BodegaCriticaResponse> criticas = new ArrayList<>();
         for (Bodega bodega : bodegaRepository.findAllByOrderByIdAsc()) {
             int unidades = stockAlmacenadoEnBodega(bodega.getId());
             if (bodega.getCapacidad() == null || bodega.getCapacidad() == 0) {
@@ -196,12 +204,12 @@ public class IndicadoresInventarioService {
             }
             double porcentaje = calcularPorcentajeOcupacion(unidades, bodega.getCapacidad());
             if (porcentaje >= 90.0) {
-                Map<String, Object> fila = new LinkedHashMap<>();
-                fila.put("bodegaId", bodega.getId());
-                fila.put("nombre", bodega.getNombre());
-                fila.put("porcentaje", porcentaje);
-                fila.put("unidades", unidades);
-                fila.put("capacidad", bodega.getCapacidad());
+                BodegaCriticaResponse fila = new BodegaCriticaResponse();
+                fila.setBodegaId(bodega.getId());
+                fila.setNombre(bodega.getNombre());
+                fila.setPorcentaje(porcentaje);
+                fila.setUnidades(unidades);
+                fila.setCapacidad(bodega.getCapacidad());
                 criticas.add(fila);
             }
         }
