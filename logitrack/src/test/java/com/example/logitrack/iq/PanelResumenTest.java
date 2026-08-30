@@ -4,6 +4,7 @@ import com.example.logitrack.dto.LoginRequest;
 import com.example.logitrack.model.ResumenPanel;
 import com.example.logitrack.model.Rol;
 import com.example.logitrack.model.Usuario;
+import com.example.logitrack.repository.AuditoriaRepository;
 import com.example.logitrack.repository.BodegaRepository;
 import com.example.logitrack.repository.InventarioBodegaRepository;
 import com.example.logitrack.repository.MovimientoRepository;
@@ -70,6 +71,9 @@ class PanelResumenTest {
     private InventarioBodegaRepository inventarioBodegaRepository;
 
     @Autowired
+    private AuditoriaRepository auditoriaRepository;
+
+    @Autowired
     private PasswordEncoder passwordEncoder;
 
     private LocalDate hoyBogota;
@@ -83,6 +87,7 @@ class PanelResumenTest {
         inventarioBodegaRepository.deleteAll();
         ordenCompraRepository.deleteAll();
         resumenPanelRepository.deleteAll();
+        auditoriaRepository.deleteAll();
         productoRepository.deleteAll();
         bodegaRepository.deleteAll();
         proveedorRepository.deleteAll();
